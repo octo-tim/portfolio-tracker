@@ -68,43 +68,55 @@ const fmt=n=>{if(n===0)return'0';const a=Math.abs(n);if(a>=1e8)return(n<0?'-':''
 const ff=n=>n.toLocaleString();
 const pct=(a,b)=>b===0?0:((a-b)/b*100);
 
-// Get previous day's total balance for daily profit calc
 function getDailyProfit(){
-  const hist=getBalHist();
-  if(!hist.length)return 0;
+  const hist=getBalHist();if(!hist.length)return 0;
+  const cats=getCats();
+  const finItems=cats[0]?cats[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'):[];
   const dates=[...new Set(hist.map(h=>h.date))].sort();
   if(dates.length<2){
-    // Only one date recorded — compare with init values
-    const todayDate=dates[0];
-    const todayItems=hist.filter(h=>h.date===todayDate);
-    const cats=getCats();
+    const d0=dates[0];const recs=hist.filter(h=>h.date===d0);
     let diff=0;
-    todayItems.forEach(ti=>{
-      let initVal=0;
-      cats.forEach(c=>c.items.forEach(it=>{if(it.id===ti.itemId&&it.name!=='꿈비')initVal=it.bal}));
-      if(ti.itemId){
-        const item=cats.flatMap(c=>c.items).find(x=>x.id===ti.itemId);
-        if(item&&item.name!=='꿈비') diff+=(ti.bal-initVal);
-      }
-    });
+    recs.forEach(r=>{const it=finItems.find(x=>x.id===r.itemId);if(it)diff+=(r.bal-it.bal)});
     return diff;
   }
-  const latestDate=dates[dates.length-1];
-  const prevDate=dates[dates.length-2];
-  const latestRecs=hist.filter(h=>h.date===latestDate);
-  const prevRecs=hist.filter(h=>h.date===prevDate);
-  const cats=getCats();
-  let todayTotal=0,prevTotal=0;
-  const finItems=cats[0]?cats[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'):[];
+  const d1=dates[dates.length-1],d0=dates[dates.length-2];
+  const r1=hist.filter(h=>h.date===d1),r0=hist.filter(h=>h.date===d0);
+  let t1=0,t0=0;
   finItems.forEach(it=>{
-    const lr=latestRecs.find(r=>r.itemId===it.id);
-    const pr=prevRecs.find(r=>r.itemId===it.id);
-    const tVal=lr?lr.bal:it.bal;
-    const pVal=pr?pr.bal:(lr?it.bal:it.bal);
-    todayTotal+=tVal;
-    prevTotal+=pVal;
+    const a=r1.find(r=>r.itemId===it.id),b=r0.find(r=>r.itemId===it.id);
+    t1+=(a?a.bal:it.bal);t0+=(b?b.bal:it.bal);
   });
-  return todayTotal-prevTotal;
+  return t1-t0;
+}
+
+// Compute daily PnL series from balHist (for charts)
+function getDailyPnLSeries(){
+  const hist=getBalHist();if(!hist.length)return{dates:[],daily:[],monthly:{}};
+  const cats=getCats();
+  const finItems=cats[0]?cats[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'):[];
+  const dates=[...new Set(hist.map(h=>h.date))].sort();
+  // Build total per date
+  const totals=[];
+  dates.forEach(d=>{
+    const recs=hist.filter(h=>h.date===d);
+    let sum=0;
+    finItems.forEach(it=>{const r=recs.find(x=>x.itemId===it.id);sum+=(r?r.bal:it.bal)});
+    totals.push({date:d,total:sum});
+  });
+  // Daily PnL = diff from previous date
+  const daily=[];
+  for(let i=0;i<totals.length;i++){
+    const prev=i>0?totals[i-1].total:totals[i].total;
+    daily.push({date:totals[i].date,pnl:totals[i].total-prev});
+  }
+  // Monthly PnL = sum of daily PnL per month
+  const monthly={};
+  daily.forEach(d=>{
+    const m=d.date.slice(0,7);
+    if(!monthly[m])monthly[m]=0;
+    monthly[m]+=d.pnl;
+  });
+  return{dates:daily.map(d=>d.date),daily:daily.map(d=>d.pnl),monthly};
 }
 
 // =========== HEADER ===========
@@ -121,9 +133,7 @@ function renderSum(){
   const c=live();
   const all=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all.push(it)}));
   const ti=all.reduce((s,i)=>s+i.init,0),tb=all.reduce((s,i)=>s+i.bal,0);
-  // Exclude 꿈비 PnL from total
-  const gg=all.find(x=>x.name==='꿈비');
-  const ggPnl=gg?(gg.bal-gg.init):0;
+  const gg=all.find(x=>x.name==='꿈비');const ggPnl=gg?(gg.bal-gg.init):0;
   const pnl=tb-ti-ggPnl,pp=ti?pct(ti+pnl,ti):0;
   const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashArr.push(it)}));
   const cashBal=cashArr.length?cashArr[0].bal:0;
@@ -140,69 +150,65 @@ function renderSum(){
 // =========== RENDER ===========
 function render(){renderSum();document.getElementById('mainContent').innerHTML='<div class="pane on" id="paneActive"></div>';({total:rTotal,fin:rFin,cash:rCash,cumul:rCumul})[curTab]()}
 
-// =========== 금융투자자산 (BATCH INPUT + PREV DAY LOAD) ===========
+// =========== 금융투자자산 ===========
 function rFin(){
-  const cats=getCats();
-  const finCat=cats[0];
+  const cats=getCats();const finCat=cats[0];
   if(!finCat){document.getElementById('paneActive').innerHTML='<div class="em">금융투자 카테고리가 없습니다.</div>';return}
   const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
   const hist=getBalHist();
   const liveC=live();
   const liveItems=liveC[0]?liveC[0].items.filter(x=>x.name!=='현금'&&(x.init||x.bal)):[];
 
-  // Get previous date records for "전일 불러오기"
-  const dates=[...new Set(hist.map(h=>h.date))].sort();
-  const prevDate=dates.length?dates[dates.length-1]:null;
-  const prevRecs=prevDate?hist.filter(h=>h.date===prevDate):[];
-
   let h=`
     <div class="nb">📊 <b>금융투자 상품별 일별 잔액</b>을 아래 테이블에서 한번에 입력합니다.<br>
     <b>전일금액 불러오기</b>를 누르면 마지막 기록된 금액이 자동으로 채워집니다. 변경된 상품만 수정 후 저장하세요.</div>
-
-    <div class="tw">
-      <div class="ch">
-        <div class="cd" style="background:var(--blue)"></div>일별 잔액 입력
-        <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
-          <input type="date" id="batchDate" value="${today()}" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;font-family:'DM Mono',monospace">
-          <button class="btn bo2" style="padding:6px 14px;font-size:11px" onclick="loadPrevDay()">📋 전일금액 불러오기</button>
-          <button class="btn bp" style="padding:6px 14px;font-size:11px" onclick="saveBatch()">💾 일괄 저장</button>
-        </span>
-      </div>
-      <table>
-        <thead><tr><th>#</th><th>상품명</th><th style="text-align:right">현재(최종) 잔액</th><th style="text-align:right">금일 잔액 입력</th><th style="text-align:right">변동액</th></tr></thead>
-        <tbody>`;
-
+    <div class="tw"><div class="ch"><div class="cd" style="background:var(--blue)"></div>일별 잔액 입력
+      <span style="margin-left:auto;display:flex;gap:8px;align-items:center">
+        <input type="date" id="batchDate" value="${today()}" style="padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;font-family:'DM Mono',monospace">
+        <button class="btn bo2" style="padding:6px 14px;font-size:11px" onclick="loadPrevDay()">📋 전일금액 불러오기</button>
+        <button class="btn bp" style="padding:6px 14px;font-size:11px" onclick="saveBatch()">💾 일괄 저장</button>
+      </span></div>
+    <table><thead><tr><th>#</th><th>상품명</th><th style="text-align:right">현재(최종) 잔액</th><th style="text-align:right">금일 잔액 입력</th><th style="text-align:right">변동액</th></tr></thead><tbody>`;
   items.forEach((it,i)=>{
-    const liveIt=liveItems.find(x=>x.id===it.id);
-    const curBal=liveIt?liveIt.bal:it.bal;
-    h+=`<tr class="batch-row">
-      <td>${i+1}</td>
-      <td>${it.name}</td>
-      <td class="am">${ff(curBal)}</td>
+    const liveIt=liveItems.find(x=>x.id===it.id);const curBal=liveIt?liveIt.bal:it.bal;
+    h+=`<tr class="batch-row"><td>${i+1}</td><td>${it.name}</td><td class="am">${ff(curBal)}</td>
       <td><input type="text" class="batch-inp" id="batch_${it.id}" data-id="${it.id}" data-cur="${curBal}" placeholder="금액 입력" oninput="onBatchInput(this)"></td>
-      <td class="am" id="diff_${it.id}" style="color:var(--t3)">-</td>
-    </tr>`;
+      <td class="am" id="diff_${it.id}" style="color:var(--t3)">-</td></tr>`;
   });
-
   h+=`</tbody></table></div>`;
 
-  // Current status table
-  h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>현재 상품별 현황</div>
-    <table><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th><th>최종 기록일</th></tr></thead><tbody>`;
+  // ===== 기준일 대비 손익변동표 (replaces "현재 상품별 현황") =====
+  h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--amber)"></div>기준일 대비 손익변동표</div>
+    <table><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익(원)</th><th>수익률</th><th>최종 기록일</th></tr></thead><tbody>`;
+  let totalInit=0,totalBal=0;
   liveItems.forEach((it,i)=>{
     const pnl2=it.bal-it.init,p2=it.init?pct(it.bal,it.init):0;
     const lastH=hist.filter(x=>x.itemId===it.id).sort((a,b)=>b.date.localeCompare(a.date))[0];
-    h+=`<tr><td>${i+1}</td><td>${it.name}</td><td class="am">${ff(it.init)}</td><td class="am">${ff(it.bal)}</td>
+    totalInit+=it.init;totalBal+=it.bal;
+    const isGg=it.name==='꿈비';
+    h+=`<tr${isGg?' style="opacity:.5"':''}>
+      <td>${i+1}</td><td>${it.name}${isGg?' <span style="font-size:9px;color:var(--t3)">(손익 제외)</span>':''}</td>
+      <td class="am">${ff(it.init)}</td><td class="am">${ff(it.bal)}</td>
       <td class="am ${pnl2>=0?'up':'dn'}">${pnl2>=0?'+':''}${ff(pnl2)}</td>
       <td class="am ${p2>=0?'up':'dn'}">${it.init?(p2>=0?'+':'')+p2.toFixed(2)+'%':'-'}</td>
       <td class="am" style="color:var(--t3)">${lastH?lastH.date:'-'}</td></tr>`;
   });
-  h+='</tbody></table></div>';
+  const totPnl=totalBal-totalInit,totPct=totalInit?pct(totalBal,totalInit):0;
+  h+=`<tr class="fr"><td></td><td>합계</td><td class="am">${ff(totalInit)}</td><td class="am">${ff(totalBal)}</td>
+    <td class="am ${totPnl>=0?'up':'dn'}">${totPnl>=0?'+':''}${ff(totPnl)}</td>
+    <td class="am ${totPct>=0?'up':'dn'}">${totPct>=0?'+':''}${totPct.toFixed(2)}%</td><td></td></tr>`;
+  h+=`</tbody></table></div>`;
+
+  // ===== 일별 손익 변화 그래프 =====
+  h+=`<div class="cg">
+    <div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 손익 변화</div><canvas id="dailyPnlChart" height="240"></canvas></div>
+    <div class="cc"><div class="ct"><div class="cd" style="background:var(--green)"></div>월별 손익 변화</div><canvas id="monthlyPnlChart" height="240"></canvas></div>
+  </div>`;
 
   // History log
   const sortedHist=[...hist].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
   if(sortedHist.length){
-    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--amber)"></div>잔액 기록 이력 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${sortedHist.length}건</span></div>
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--purple)"></div>잔액 기록 이력 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${sortedHist.length}건</span></div>
       <table><thead><tr><th>날짜</th><th>상품명</th><th>잔액</th><th>메모</th><th></th></tr></thead><tbody>`;
     sortedHist.slice(0,50).forEach(r=>{
       h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${findItemName(r.itemId)}</td>
@@ -212,324 +218,171 @@ function rFin(){
     h+='</tbody></table></div>';
   }
 
-  // PnL chart
-  h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--green)"></div>금융투자 상품별 손익 현황</div><canvas id="pnlC" height="280"></canvas></div>`;
-
   document.getElementById('paneActive').innerHTML=h;
-  setTimeout(drawBar,50);
+  setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50);
 }
 
-function findItemName(itemId){
-  let name='?';getCats().forEach(c=>c.items.forEach(it=>{if(it.id===itemId)name=it.name}));return name;
-}
+function findItemName(itemId){let name='?';getCats().forEach(c=>c.items.forEach(it=>{if(it.id===itemId)name=it.name}));return name}
 
-// Batch input handlers
-function onBatchInput(el){
-  const raw=el.value.replace(/,/g,'');
-  const num=parseInt(raw);
-  const cur=parseInt(el.dataset.cur);
-  const diffEl=document.getElementById('diff_'+el.dataset.id);
-  if(!isNaN(num)){
-    const d=num-cur;
-    diffEl.innerHTML=`<span class="${d>=0?'up':'dn'}">${d>=0?'+':''}${ff(d)}</span>`;
-    if(num!==cur)el.classList.add('batch-changed');else el.classList.remove('batch-changed');
-  }else{
-    diffEl.innerHTML='-';
-    el.classList.remove('batch-changed');
-  }
-}
-
-function loadPrevDay(){
-  const hist=getBalHist();
-  if(!hist.length){alert('이전 기록이 없습니다.');return}
-  const dates=[...new Set(hist.map(h=>h.date))].sort();
-  const lastDate=dates[dates.length-1];
-  const lastRecs=hist.filter(h=>h.date===lastDate);
-  const cats=getCats();
-  const finCat=cats[0];if(!finCat)return;
-  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
-  let filled=0;
-  items.forEach(it=>{
-    const inp=document.getElementById('batch_'+it.id);
-    if(!inp)return;
-    const rec=lastRecs.find(r=>r.itemId===it.id);
-    if(rec){
-      inp.value=ff(rec.bal);
-      filled++;
-      onBatchInput(inp);
-    }
-  });
-  alert(`${lastDate} 기준 ${filled}개 상품 금액을 불러왔습니다.\n변경이 필요한 상품만 수정 후 저장하세요.`);
-}
-
-function saveBatch(){
-  const date=document.getElementById('batchDate').value;
-  if(!date){alert('날짜를 선택하세요.');return}
-  const cats=getCats();
-  const finCat=cats[0];if(!finCat)return;
-  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
-  const h2=getBalHist();const d=getDaily();
-  let count=0;
-  items.forEach(it=>{
-    const inp=document.getElementById('batch_'+it.id);
-    if(!inp||!inp.value)return;
-    const num=parseInt(inp.value.replace(/,/g,''));
-    if(isNaN(num))return;
-    h2.push({id:uid(),date,itemId:it.id,bal:num,memo:''});
-    d.push({id:uid(),date,product:it.name,bal:num,memo:''});
-    count++;
-  });
-  if(!count){alert('입력된 금액이 없습니다.');return}
-  saveBalHist(h2);saveDaily(d);
-  alert(`${date} 기준 ${count}개 상품 잔액이 저장되었습니다.`);
-  render();
-}
-
-function delBalHist(id){
-  if(!confirm('이 기록을 삭제하시겠습니까?'))return;
-  saveBalHist(getBalHist().filter(r=>r.id!==id));render();
-}
-
-function drawBar(){
-  const cv=document.getElementById('pnlC');if(!cv)return;
-  const c=live();if(!c[0])return;
-  const fi=c[0].items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+// ===== CHART: Daily PnL Bar =====
+function drawDailyPnlChart(){
+  const cv=document.getElementById('dailyPnlChart');if(!cv)return;
+  const {dates,daily}=getDailyPnLSeries();
+  if(dates.length<2){cv.parentElement.innerHTML+='<div class="em" style="padding:20px">일별 기록이 2건 이상 필요합니다.</div>';return}
+  // Skip first entry (always 0)
+  const ds=dates.slice(1),vs=daily.slice(1);
+  if(!vs.length)return;
   const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.getBoundingClientRect();
-  cv.width=rect.width*dpr;cv.height=280*dpr;ctx.scale(dpr,dpr);
-  const W=rect.width,H=280;
-  const pnls=fi.map(i=>i.bal-i.init),names=fi.map(i=>i.name),mx=Math.max(...pnls.map(Math.abs),1);
-  const pad={t:20,b:65,l:10,r:10},bA=W-pad.l-pad.r,bW=Math.min(bA/pnls.length*.7,40);
-  const gap=(bA-bW*pnls.length)/(pnls.length+1),cH=H-pad.t-pad.b,zY=pad.t+cH/2;
-  ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;
+  cv.width=rect.width*dpr;cv.height=240*dpr;ctx.scale(dpr,dpr);
+  const W=rect.width,H=240;
+  const mx=Math.max(...vs.map(Math.abs),1);
+  const pad={t:20,b:45,l:10,r:10},bA=W-pad.l-pad.r;
+  const bW=Math.min(bA/vs.length*.7,30),gap=(bA-bW*vs.length)/(vs.length+1);
+  const cH=H-pad.t-pad.b,zY=pad.t+cH/2;
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(pad.l,zY);ctx.lineTo(W-pad.r,zY);ctx.stroke();
-  pnls.forEach((v,i)=>{
-    const x=pad.l+gap*(i+1)+bW*i,h2=Math.abs(v)/mx*(cH/2-10),y=v>=0?zY-h2:zY,co=v>=0?'#2ee8a5':'#ff5c72';
+  vs.forEach((v,i)=>{
+    const x=pad.l+gap*(i+1)+bW*i,h2=Math.abs(v)/mx*(cH/2-8),y=v>=0?zY-h2:zY;
+    const co=v>=0?'#2ee8a5':'#ff5c72';
+    ctx.fillStyle=co;rr(ctx,x,y,bW,h2,2);ctx.fill();
+    if(vs.length<=20){ctx.fillStyle=co;ctx.font='500 8px DM Mono';ctx.textAlign='center';ctx.fillText((v>=0?'+':'')+fmt(v),x+bW/2,v>=0?y-4:y+h2+10)}
+    ctx.save();ctx.translate(x+bW/2,H-pad.b+8);ctx.rotate(-Math.PI/4);
+    ctx.fillStyle='#516480';ctx.font='9px DM Mono';ctx.textAlign='right';ctx.fillText(ds[i].slice(5),0,0);ctx.restore();
+  });
+}
+
+// ===== CHART: Monthly PnL Bar =====
+function drawMonthlyPnlChart(){
+  const cv=document.getElementById('monthlyPnlChart');if(!cv)return;
+  const {monthly}=getDailyPnLSeries();
+  const months=Object.keys(monthly).sort();
+  const vs=months.map(m=>monthly[m]);
+  if(!months.length){cv.parentElement.innerHTML+='<div class="em" style="padding:20px">월별 데이터가 없습니다.</div>';return}
+  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.getBoundingClientRect();
+  cv.width=rect.width*dpr;cv.height=240*dpr;ctx.scale(dpr,dpr);
+  const W=rect.width,H=240;
+  const mx=Math.max(...vs.map(Math.abs),1);
+  const pad={t:20,b:40,l:10,r:10},bA=W-pad.l-pad.r;
+  const bW=Math.min(bA/vs.length*.6,50),gap=(bA-bW*vs.length)/(vs.length+1);
+  const cH=H-pad.t-pad.b,zY=pad.t+cH/2;
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,zY);ctx.lineTo(W-pad.r,zY);ctx.stroke();
+  vs.forEach((v,i)=>{
+    const x=pad.l+gap*(i+1)+bW*i,h2=Math.abs(v)/mx*(cH/2-8),y=v>=0?zY-h2:zY;
+    const co=v>=0?'#2ee8a5':'#ff5c72';
     ctx.fillStyle=co;rr(ctx,x,y,bW,h2,3);ctx.fill();
     ctx.fillStyle=co;ctx.font='500 9px DM Mono';ctx.textAlign='center';
     ctx.fillText((v>=0?'+':'')+fmt(v),x+bW/2,v>=0?y-5:y+h2+12);
-    ctx.save();ctx.translate(x+bW/2,H-pad.b+10);ctx.rotate(-Math.PI/4);
-    ctx.fillStyle='#8fa3c0';ctx.font='10px Noto Sans KR';ctx.textAlign='right';
-    ctx.fillText(names[i],0,0);ctx.restore();
+    ctx.fillStyle='#8fa3c0';ctx.font='10px Noto Sans KR';ctx.textAlign='center';
+    ctx.fillText(months[i].slice(2).replace('-','/'),x+bW/2,H-pad.b+14);
   });
 }
+
 function rr(ctx,x,y,w,h,r){ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath()}
+
+// Batch input handlers
+function onBatchInput(el){
+  const raw=el.value.replace(/,/g,''),num=parseInt(raw),cur=parseInt(el.dataset.cur);
+  const diffEl=document.getElementById('diff_'+el.dataset.id);
+  if(!isNaN(num)){const d=num-cur;diffEl.innerHTML=`<span class="${d>=0?'up':'dn'}">${d>=0?'+':''}${ff(d)}</span>`;
+    if(num!==cur)el.classList.add('batch-changed');else el.classList.remove('batch-changed');
+  }else{diffEl.innerHTML='-';el.classList.remove('batch-changed')}
+}
+function loadPrevDay(){
+  const hist=getBalHist();if(!hist.length){alert('이전 기록이 없습니다.');return}
+  const dates=[...new Set(hist.map(h=>h.date))].sort();
+  const lastDate=dates[dates.length-1],lastRecs=hist.filter(h=>h.date===lastDate);
+  const cats=getCats(),finCat=cats[0];if(!finCat)return;
+  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+  let filled=0;
+  items.forEach(it=>{const inp=document.getElementById('batch_'+it.id);if(!inp)return;
+    const rec=lastRecs.find(r=>r.itemId===it.id);if(rec){inp.value=ff(rec.bal);filled++;onBatchInput(inp)}});
+  alert(`${lastDate} 기준 ${filled}개 상품 금액을 불러왔습니다.\n변경이 필요한 상품만 수정 후 저장하세요.`);
+}
+function saveBatch(){
+  const date=document.getElementById('batchDate').value;if(!date){alert('날짜를 선택하세요.');return}
+  const cats=getCats(),finCat=cats[0];if(!finCat)return;
+  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+  const h2=getBalHist(),d=getDaily();let count=0;
+  items.forEach(it=>{const inp=document.getElementById('batch_'+it.id);if(!inp||!inp.value)return;
+    const num=parseInt(inp.value.replace(/,/g,''));if(isNaN(num))return;
+    h2.push({id:uid(),date,itemId:it.id,bal:num,memo:''});d.push({id:uid(),date,product:it.name,bal:num,memo:''});count++});
+  if(!count){alert('입력된 금액이 없습니다.');return}
+  saveBalHist(h2);saveDaily(d);alert(`${date} 기준 ${count}개 상품 잔액이 저장되었습니다.`);render();
+}
+function delBalHist(id){if(!confirm('이 기록을 삭제하시겠습니까?'))return;saveBalHist(getBalHist().filter(r=>r.id!==id));render()}
 
 // =========== 현금 입출금 ===========
 function rCash(){
-  const c=live();
-  let cashBal=0;c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashBal=it.bal}));
+  const c=live();let cashBal=0;c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashBal=it.bal}));
   const recs=getCash();
   const prods=[];getCats().forEach(cat=>cat.items.forEach(it=>{if(it.name!=='현금')prods.push({cat:cat.name,name:it.name})}));
   const pOpts=prods.map(p=>`<option value="${p.name}">${p.name} (${p.cat})</option>`).join('');
-  let h=`
-    <div class="nb">💰 <b>현금 입출금 기록</b> — 투자 관련 입출금 시 연동 상품의 잔액이 자동 조정됩니다.<br>
-      <b>예)</b> 지인대여 상환 입금 → 현금↑ + 대여금↓ &nbsp;|&nbsp; 추가 투자 출금 → 현금↓ + 투자상품↑</div>
-    <div class="fc">
-      <div class="fg"><label>날짜</label><input type="date" id="cDate" value="${today()}"></div>
-      <div class="fg"><label>유형</label><select id="cType" style="min-width:80px"><option value="in">입금</option><option value="out">출금</option></select></div>
-      <div class="fg"><label>금액</label><input type="number" id="cAmt" placeholder="금액" style="min-width:140px"></div>
-      <div class="fg"><label>투자 연동</label><select id="cInv" onchange="document.getElementById('lkW').style.display=this.value==='yes'?'':'none'" style="min-width:110px"><option value="no">일반</option><option value="yes">투자 관련</option></select></div>
-      <div class="fg" id="lkW" style="display:none"><label>연동 상품</label><select id="cLk" style="min-width:160px">${pOpts}</select></div>
-      <div class="fg" style="flex:1;min-width:120px"><label>적요</label><input type="text" id="cMemo" placeholder="메모" style="width:100%"></div>
-      <button class="btn bp" onclick="addCash()">등록</button>
-    </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px"><div class="cd" style="background:var(--cyan)"></div>현금 잔액: <span class="mono" style="color:var(--cyan)">${ff(cashBal)}원</span></div>
-      <button class="btn bo2" onclick="expCash()">CSV 내보내기</button>
-    </div>`;
+  let h=`<div class="nb">💰 <b>현금 입출금 기록</b> — 투자 관련 입출금 시 연동 상품의 잔액이 자동 조정됩니다.<br><b>예)</b> 지인대여 상환 입금 → 현금↑ + 대여금↓ &nbsp;|&nbsp; 추가 투자 출금 → 현금↓ + 투자상품↑</div>
+    <div class="fc"><div class="fg"><label>날짜</label><input type="date" id="cDate" value="${today()}"></div><div class="fg"><label>유형</label><select id="cType" style="min-width:80px"><option value="in">입금</option><option value="out">출금</option></select></div><div class="fg"><label>금액</label><input type="number" id="cAmt" placeholder="금액" style="min-width:140px"></div><div class="fg"><label>투자 연동</label><select id="cInv" onchange="document.getElementById('lkW').style.display=this.value==='yes'?'':'none'" style="min-width:110px"><option value="no">일반</option><option value="yes">투자 관련</option></select></div><div class="fg" id="lkW" style="display:none"><label>연동 상품</label><select id="cLk" style="min-width:160px">${pOpts}</select></div><div class="fg" style="flex:1;min-width:120px"><label>적요</label><input type="text" id="cMemo" placeholder="메모" style="width:100%"></div><button class="btn bp" onclick="addCash()">등록</button></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px"><div class="cd" style="background:var(--cyan)"></div>현금 잔액: <span class="mono" style="color:var(--cyan)">${ff(cashBal)}원</span></div><button class="btn bo2" onclick="expCash()">CSV 내보내기</button></div>`;
   if(!recs.length){h+='<div class="tw"><div class="em">현금 입출금 기록이 없습니다.</div></div>'}
   else{
-    const tIn=recs.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0);
-    const tOut=recs.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0);
-    const invC=recs.filter(r=>r.isInvestment).length;
-    h+=`<div class="sr">
-      <div class="sb"><div class="sl">총 입금</div><div class="sv mono up">+${ff(tIn)}</div></div>
-      <div class="sb"><div class="sl">총 출금</div><div class="sv mono dn">-${ff(tOut)}</div></div>
-      <div class="sb"><div class="sl">순 입출금</div><div class="sv mono ${tIn-tOut>=0?'up':'dn'}">${tIn-tOut>=0?'+':''}${ff(tIn-tOut)}</div></div>
-      <div class="sb"><div class="sl">투자연동</div><div class="sv mono" style="color:var(--purple)">${invC}건</div></div></div>`;
-    const chrono=[...recs].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
-    const bm={};let rb=0;chrono.forEach(r=>{rb+=(r.type==='in'?1:-1)*r.amount;bm[r.id]=rb});
+    const tIn=recs.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0),tOut=recs.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0),invC=recs.filter(r=>r.isInvestment).length;
+    h+=`<div class="sr"><div class="sb"><div class="sl">총 입금</div><div class="sv mono up">+${ff(tIn)}</div></div><div class="sb"><div class="sl">총 출금</div><div class="sv mono dn">-${ff(tOut)}</div></div><div class="sb"><div class="sl">순 입출금</div><div class="sv mono ${tIn-tOut>=0?'up':'dn'}">${tIn-tOut>=0?'+':''}${ff(tIn-tOut)}</div></div><div class="sb"><div class="sl">투자연동</div><div class="sv mono" style="color:var(--purple)">${invC}건</div></div></div>`;
+    const chrono=[...recs].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));const bm={};let rb=0;chrono.forEach(r=>{rb+=(r.type==='in'?1:-1)*r.amount;bm[r.id]=rb});
     const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
     h+=`<div class="tw"><table><thead><tr><th>날짜</th><th>유형</th><th style="text-align:right">금액</th><th style="text-align:right">잔액</th><th>연동상품</th><th>적요</th><th></th></tr></thead><tbody>`;
-    sorted.forEach(r=>{
-      const tag=r.type==='in'?'<span class="tg ti">입금</span>':'<span class="tg to">출금</span>';
-      const lk=r.isInvestment&&r.linkedProduct?`${r.linkedProduct}<span class="lb">투자연동</span>`:'<span style="color:var(--t3)">-</span>';
-      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${tag}</td>
-        <td class="am ${r.type==='in'?'up':'dn'}">${r.type==='in'?'+':'-'}${ff(r.amount)}</td>
-        <td class="am">${ff(bm[r.id]||0)}</td><td style="text-align:left;font-size:12px">${lk}</td>
-        <td style="text-align:left;color:var(--t3);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.memo||''}</td>
-        <td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delCash('${r.id}')">삭제</button></td></tr>`;
-    });
+    sorted.forEach(r=>{const tag=r.type==='in'?'<span class="tg ti">입금</span>':'<span class="tg to">출금</span>';const lk=r.isInvestment&&r.linkedProduct?`${r.linkedProduct}<span class="lb">투자연동</span>`:'<span style="color:var(--t3)">-</span>';
+      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${tag}</td><td class="am ${r.type==='in'?'up':'dn'}">${r.type==='in'?'+':'-'}${ff(r.amount)}</td><td class="am">${ff(bm[r.id]||0)}</td><td style="text-align:left;font-size:12px">${lk}</td><td style="text-align:left;color:var(--t3);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delCash('${r.id}')">삭제</button></td></tr>`});
     h+='</tbody></table></div>';
   }
   document.getElementById('paneActive').innerHTML=h;
 }
-function addCash(){
-  const date=document.getElementById('cDate').value,type=document.getElementById('cType').value,amount=parseInt(document.getElementById('cAmt').value);
-  const isInvestment=document.getElementById('cInv').value==='yes',linkedProduct=isInvestment?document.getElementById('cLk').value:null,memo=document.getElementById('cMemo').value;
-  if(!date||isNaN(amount)||amount<=0){alert('날짜와 금액을 입력하세요.');return}
-  const r=getCash();r.push({id:uid(),date,type,amount,isInvestment,linkedProduct,memo});saveCash(r);render();
-}
+function addCash(){const date=document.getElementById('cDate').value,type=document.getElementById('cType').value,amount=parseInt(document.getElementById('cAmt').value);const isInvestment=document.getElementById('cInv').value==='yes',linkedProduct=isInvestment?document.getElementById('cLk').value:null,memo=document.getElementById('cMemo').value;if(!date||isNaN(amount)||amount<=0){alert('날짜와 금액을 입력하세요.');return}const r=getCash();r.push({id:uid(),date,type,amount,isInvestment,linkedProduct,memo});saveCash(r);render()}
 function delCash(id){if(!confirm('삭제하시겠습니까?'))return;saveCash(getCash().filter(r=>r.id!==id));render()}
-function expCash(){
-  const r=getCash();if(!r.length){alert('데이터가 없습니다.');return}
-  let csv='\uFEFF날짜,유형,금액,투자연동,연동상품,적요\n';
-  [...r].sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>{csv+=`${x.date},${x.type==='in'?'입금':'출금'},${x.amount},${x.isInvestment?'Y':'N'},${x.linkedProduct||''},${x.memo||''}\n`});
-  const b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='현금입출금_'+today()+'.csv';a.click();
-}
+function expCash(){const r=getCash();if(!r.length){alert('데이터가 없습니다.');return}let csv='\uFEFF날짜,유형,금액,투자연동,연동상품,적요\n';[...r].sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>{csv+=`${x.date},${x.type==='in'?'입금':'출금'},${x.amount},${x.isInvestment?'Y':'N'},${x.linkedProduct||''},${x.memo||''}\n`});const b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='현금입출금_'+today()+'.csv';a.click()}
 
 // =========== 누적 수익 현황 ===========
 function rCumul(){
   const c=live(),all=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all.push(it)}));
-  const ti=all.reduce((s,i)=>s+i.init,0);
-  const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;
-  const recs=getDaily();
+  const ti=all.reduce((s,i)=>s+i.init,0);const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;const recs=getDaily();
   let h=`<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>포트폴리오 손익 요약</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
       <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익</div><div class="mono up" style="font-size:20px">+${ff(CUM_PROFIT)}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">수익률 (기초 대비)</div><div class="mono up" style="font-size:20px">+${cumPp.toFixed(2)}%</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록 건수</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div>
-    </div></div>`;
-  if(recs.length>=2){
-    h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
-    h+=`<div class="cc full" style="margin-top:16px"><div class="ct"><div class="cd" style="background:var(--amber)"></div>상품별 일별 수익 추이</div><div id="pdC"></div></div>`;
-  }else{h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>'}
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">수익률</div><div class="mono up" style="font-size:20px">+${cumPp.toFixed(2)}%</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div></div>`;
+  if(recs.length>=2){h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
+    h+=`<div class="cc full" style="margin-top:16px"><div class="ct"><div class="cd" style="background:var(--amber)"></div>상품별 일별 수익 추이</div><div id="pdC"></div></div>`}
+  else{h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>'}
   const rk=all.filter(x=>x.init>0).map(x=>({...x,pn:x.bal-x.init,p2:pct(x.bal,x.init)})).sort((a,b)=>b.pn-a.pn);
-  h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--purple)"></div>상품별 수익 랭킹</div>
-    <table><thead><tr><th>순위</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
-  rk.forEach((r,i)=>{h+=`<tr><td>${i+1}</td><td>${r.name}</td><td class="am">${ff(r.init)}</td><td class="am">${ff(r.bal)}</td>
-    <td class="am ${r.pn>=0?'up':'dn'}">${r.pn>=0?'+':''}${ff(r.pn)}</td>
-    <td class="am ${r.p2>=0?'up':'dn'}">${r.p2>=0?'+':''}${r.p2.toFixed(2)}%</td></tr>`});
+  h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--purple)"></div>상품별 수익 랭킹</div><table><thead><tr><th>순위</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
+  rk.forEach((r,i)=>{h+=`<tr><td>${i+1}</td><td>${r.name}</td><td class="am">${ff(r.init)}</td><td class="am">${ff(r.bal)}</td><td class="am ${r.pn>=0?'up':'dn'}">${r.pn>=0?'+':''}${ff(r.pn)}</td><td class="am ${r.p2>=0?'up':'dn'}">${r.p2>=0?'+':''}${r.p2.toFixed(2)}%</td></tr>`});
   h+='</tbody></table></div>';
-  if(recs.length){
-    const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date));
-    h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--cyan)"></div>일별 수익 기록 전체 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${recs.length}건</span></div>
-      <table><thead><tr><th>날짜</th><th>상품</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>`;
-    sorted.slice(0,100).forEach(r=>{
-      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${r.product}</td>
-        <td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td>
-        <td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delDR('${r.id}')">삭제</button></td></tr>`;
-    });
-    h+='</tbody></table></div>';
-  }
+  if(recs.length){const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date));
+    h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--cyan)"></div>일별 기록 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${recs.length}건</span></div><table><thead><tr><th>날짜</th><th>상품</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>`;
+    sorted.slice(0,100).forEach(r=>{h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${r.product}</td><td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delDR('${r.id}')">삭제</button></td></tr>`});
+    h+='</tbody></table></div>'}
   document.getElementById('paneActive').innerHTML=h;
   if(recs.length>=2)setTimeout(()=>{drawCum(recs);drawPD(recs)},60);
 }
 function delDR(id){saveDaily(getDaily().filter(r=>r.id!==id));render()}
-
-function drawCum(recs){
-  const cv=document.getElementById('cumC');if(!cv)return;
-  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();
-  cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);
-  const W=rect.width,H=320;
-  const bd={};recs.forEach(r=>{if(!bd[r.date])bd[r.date]=0;bd[r.date]+=r.bal});
-  const ds=Object.keys(bd).sort(),vs=ds.map(d=>bd[d]);
-  if(vs.length<2)return;
-  const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;
-  const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;
-  const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;
-  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
-  for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
-    ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}
-  ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));
-  ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();
-  const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(77,142,255,.15)');gr.addColorStop(1,'rgba(77,142,255,0)');ctx.fillStyle=gr;ctx.fill();
-  ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#4d8eff';ctx.lineWidth=2;ctx.stroke();
-  vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#4d8eff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});
-  ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';
-  ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)});
-}
-function drawPD(recs){
-  const el=document.getElementById('pdC');if(!el)return;
-  const bp={};recs.forEach(r=>{if(!bp[r.product])bp[r.product]=[];bp[r.product].push(r)});
-  let h='<table><thead><tr><th>상품</th><th>최초 기록</th><th>최근 기록</th><th>기간 손익</th><th>기록 수</th></tr></thead><tbody>';
-  Object.entries(bp).forEach(([p,rr2])=>{rr2.sort((a,b)=>a.date.localeCompare(b.date));const f=rr2[0].bal,l=rr2[rr2.length-1].bal,d2=l-f;
-    h+=`<tr><td style="text-align:left">${p}</td><td class="am">${rr2[0].date} / ${ff(f)}</td><td class="am">${rr2[rr2.length-1].date} / ${ff(l)}</td>
-      <td class="am ${d2>=0?'up':'dn'}">${d2>=0?'+':''}${ff(d2)}</td><td class="am">${rr2.length}건</td></tr>`});
-  h+='</tbody></table>';el.innerHTML=h;
-}
+function drawCum(recs){const cv=document.getElementById('cumC');if(!cv)return;const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);const W=rect.width,H=320;const bd={};recs.forEach(r=>{if(!bd[r.date])bd[r.date]=0;bd[r.date]+=r.bal});const ds=Object.keys(bd).sort(),vs=ds.map(d=>bd[d]);if(vs.length<2)return;const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(77,142,255,.15)');gr.addColorStop(1,'rgba(77,142,255,0)');ctx.fillStyle=gr;ctx.fill();ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#4d8eff';ctx.lineWidth=2;ctx.stroke();vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#4d8eff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)})}
+function drawPD(recs){const el=document.getElementById('pdC');if(!el)return;const bp={};recs.forEach(r=>{if(!bp[r.product])bp[r.product]=[];bp[r.product].push(r)});let h='<table><thead><tr><th>상품</th><th>최초 기록</th><th>최근 기록</th><th>기간 손익</th><th>기록 수</th></tr></thead><tbody>';Object.entries(bp).forEach(([p,rr2])=>{rr2.sort((a,b)=>a.date.localeCompare(b.date));const f=rr2[0].bal,l=rr2[rr2.length-1].bal,d2=l-f;h+=`<tr><td style="text-align:left">${p}</td><td class="am">${rr2[0].date} / ${ff(f)}</td><td class="am">${rr2[rr2.length-1].date} / ${ff(l)}</td><td class="am ${d2>=0?'up':'dn'}">${d2>=0?'+':''}${ff(d2)}</td><td class="am">${rr2.length}건</td></tr>`});h+='</tbody></table>';el.innerHTML=h}
 
 // =========== 전체 투자자산 ===========
 function rTotal(){
-  const c=live();let h='',gi=0;
-  const allBal=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.bal>0)allBal.push({name:it.name,val:it.bal})}));
-  c.forEach((cat,ci)=>{
-    const vis=cat.items.filter(x=>x.init||x.bal);if(!vis.length)return;
-    const cI=vis.reduce((s,i)=>s+i.init,0),cB=vis.reduce((s,i)=>s+i.bal,0),cP=cB-cI,cPp=cI?pct(cB,cI):0;
-    const mx=Math.max(...vis.map(i=>Math.abs(i.bal-i.init)),1);
-    h+=`<div class="tw" style="margin-bottom:20px"><div class="ch"><div class="cd" style="background:${cat.color}"></div>${cat.name}
-      <span style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:400">평가합계: <span class="mono" style="color:var(--t1)">${fmt(cB)}</span></span></div>
-      <table><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th><th class="bc"></th></tr></thead><tbody>`;
-    vis.forEach(it=>{gi++;const pnl2=it.bal-it.init,p2=it.init?pct(it.bal,it.init):0,bw=Math.min(Math.abs(pnl2)/mx*100,100);
-      h+=`<tr><td>${gi}</td><td>${it.name}</td><td class="am">${ff(it.init)}</td><td class="am">${ff(it.bal)}</td>
-        <td class="am ${pnl2>=0?'up':'dn'}">${pnl2>=0?'+':''}${ff(pnl2)}</td>
-        <td class="am ${p2>=0?'up':'dn'}">${it.init?(p2>=0?'+':'')+p2.toFixed(2)+'%':'-'}</td>
-        <td class="bc"><div class="bo"><div class="bi" style="width:${bw}%;background:${pnl2>=0?'var(--green)':'var(--red)'}"></div></div></td></tr>`});
-    h+=`<tr class="fr"><td></td><td>소계</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td>
-      <td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td>
-      <td class="am ${cPp>=0?'up':'dn'}">${cI?(cPp>=0?'+':'')+cPp.toFixed(2)+'%':'-'}</td><td></td></tr></tbody></table></div>`;
-  });
-  const all2=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all2.push(it)}));
-  const gI=all2.reduce((s,i)=>s+i.init,0),gB=all2.reduce((s,i)=>s+i.bal,0),gP=gB-gI,gPp=pct(gB,gI);
-  h+=`<div class="tw"><table><tbody><tr class="fr" style="font-size:14px"><td style="width:36px"></td><td style="text-align:left;font-weight:800">총 합계</td>
-    <td class="am">${ff(gI)}</td><td class="am">${ff(gB)}</td><td class="am ${gP>=0?'up':'dn'}">${gP>=0?'+':''}${ff(gP)}</td>
-    <td class="am ${gPp>=0?'up':'dn'}">${gPp>=0?'+':''}${gPp.toFixed(2)}%</td><td></td></tr></tbody></table></div>`;
-  h+='<div class="cg">';
-  const catData=c.map(x=>({name:x.name,val:x.items.reduce((s,i)=>s+Math.max(i.bal,0),0),color:x.color})).filter(x=>x.val>0);
+  const c=live();let h='',gi=0;const allBal=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.bal>0)allBal.push({name:it.name,val:it.bal})}));
+  c.forEach((cat,ci)=>{const vis=cat.items.filter(x=>x.init||x.bal);if(!vis.length)return;const cI=vis.reduce((s,i)=>s+i.init,0),cB=vis.reduce((s,i)=>s+i.bal,0),cP=cB-cI,cPp=cI?pct(cB,cI):0;const mx=Math.max(...vis.map(i=>Math.abs(i.bal-i.init)),1);
+    h+=`<div class="tw" style="margin-bottom:20px"><div class="ch"><div class="cd" style="background:${cat.color}"></div>${cat.name}<span style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:400">평가합계: <span class="mono" style="color:var(--t1)">${fmt(cB)}</span></span></div><table><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th><th class="bc"></th></tr></thead><tbody>`;
+    vis.forEach(it=>{gi++;const pnl2=it.bal-it.init,p2=it.init?pct(it.bal,it.init):0,bw=Math.min(Math.abs(pnl2)/mx*100,100);h+=`<tr><td>${gi}</td><td>${it.name}</td><td class="am">${ff(it.init)}</td><td class="am">${ff(it.bal)}</td><td class="am ${pnl2>=0?'up':'dn'}">${pnl2>=0?'+':''}${ff(pnl2)}</td><td class="am ${p2>=0?'up':'dn'}">${it.init?(p2>=0?'+':'')+p2.toFixed(2)+'%':'-'}</td><td class="bc"><div class="bo"><div class="bi" style="width:${bw}%;background:${pnl2>=0?'var(--green)':'var(--red)'}"></div></div></td></tr>`});
+    h+=`<tr class="fr"><td></td><td>소계</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td><td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td><td class="am ${cPp>=0?'up':'dn'}">${cI?(cPp>=0?'+':'')+cPp.toFixed(2)+'%':'-'}</td><td></td></tr></tbody></table></div>`});
+  const all2=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all2.push(it)}));const gI=all2.reduce((s,i)=>s+i.init,0),gB=all2.reduce((s,i)=>s+i.bal,0),gP=gB-gI,gPp=pct(gB,gI);
+  h+=`<div class="tw"><table><tbody><tr class="fr" style="font-size:14px"><td style="width:36px"></td><td style="text-align:left;font-weight:800">총 합계</td><td class="am">${ff(gI)}</td><td class="am">${ff(gB)}</td><td class="am ${gP>=0?'up':'dn'}">${gP>=0?'+':''}${ff(gP)}</td><td class="am ${gPp>=0?'up':'dn'}">${gPp>=0?'+':''}${gPp.toFixed(2)}%</td><td></td></tr></tbody></table></div>`;
+  h+='<div class="cg">';const catData=c.map(x=>({name:x.name,val:x.items.reduce((s,i)=>s+Math.max(i.bal,0),0),color:x.color})).filter(x=>x.val>0);
   h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>카테고리별 비중</div>${donut(catData)}</div>`;
-  allBal.sort((a,b)=>b.val-a.val);
-  h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--green)"></div>상품별 잔액 TOP 8</div>${donut(allBal.slice(0,8).map((p,i)=>({...p,color:PAL[i%PAL.length]})))}</div>`;
-  h+='</div>';
+  allBal.sort((a,b)=>b.val-a.val);h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--green)"></div>상품별 잔액 TOP 8</div>${donut(allBal.slice(0,8).map((p,i)=>({...p,color:PAL[i%PAL.length]})))}</div>`;h+='</div>';
   document.getElementById('paneActive').innerHTML=h;
 }
-
-function donut(data){
-  const total=data.reduce((s,d)=>s+d.val,0);if(!total)return'<div class="em">데이터 없음</div>';
-  const R=72,CX=90,CY=90,SW=18,ci=2*Math.PI*R;let cu=0,p='';
-  data.forEach(d=>{const f=d.val/total,da=ci*f,ga=ci-da,o=-ci*cu+ci*.25;
-    p+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${d.color}" stroke-width="${SW}" stroke-dasharray="${da} ${ga}" stroke-dashoffset="${o}" opacity=".85"/>`;cu+=f});
-  const lg2=data.map(d=>`<div class="li"><div class="ld" style="background:${d.color}"></div><span class="ln">${d.name}</span><span class="lp">${(d.val/total*100).toFixed(1)}%</span></div>`).join('');
-  return`<div class="dw"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="${SW}"/>${p}
-    <text x="${CX}" y="${CY-6}" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Outfit">합계</text>
-    <text x="${CX}" y="${CY+12}" text-anchor="middle" fill="var(--t1)" font-size="13" font-weight="600" font-family="DM Mono">${fmt(total)}</text></svg><div class="lg">${lg2}</div></div>`;
-}
+function donut(data){const total=data.reduce((s,d)=>s+d.val,0);if(!total)return'<div class="em">데이터 없음</div>';const R=72,CX=90,CY=90,SW=18,ci=2*Math.PI*R;let cu=0,p='';data.forEach(d=>{const f=d.val/total,da=ci*f,ga=ci-da,o=-ci*cu+ci*.25;p+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${d.color}" stroke-width="${SW}" stroke-dasharray="${da} ${ga}" stroke-dashoffset="${o}" opacity=".85"/>`;cu+=f});const lg2=data.map(d=>`<div class="li"><div class="ld" style="background:${d.color}"></div><span class="ln">${d.name}</span><span class="lp">${(d.val/total*100).toFixed(1)}%</span></div>`).join('');return`<div class="dw"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="${SW}"/>${p}<text x="${CX}" y="${CY-6}" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Outfit">합계</text><text x="${CX}" y="${CY+12}" text-anchor="middle" fill="var(--t1)" font-size="13" font-weight="600" font-family="DM Mono">${fmt(total)}</text></svg><div class="lg">${lg2}</div></div>`}
 
 // =========== ASSET MANAGER ===========
-function openMgr(){
-  const cats=getCats();
-  let h=`<div class="modal-bg" onclick="if(event.target===this)closeMgr()"><div class="modal">
-    <h3>⚙ 자산 관리<button class="modal-close" onclick="closeMgr()">✕</button></h3>
-    <div class="nb">카테고리 및 자산 항목을 추가/삭제할 수 있습니다.</div>`;
-  cats.forEach(cat=>{
-    h+=`<div style="margin-bottom:20px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-        <div class="cd" style="background:${cat.color}"></div>
-        <span style="font-weight:700;font-size:14px">${cat.name}</span>
-        <button class="btn bd" style="padding:3px 10px;font-size:10px;margin-left:auto" onclick="delCat('${cat.id}')">카테고리 삭제</button>
-      </div><div class="mgr">`;
-    cat.items.forEach(it=>{
-      if(it.name==='현금')return;
-      h+=`<div class="mgr-item"><span>${it.name}</span><span class="am" style="color:var(--t3)">기초: ${ff(it.init)}</span>
-        <button class="btn bd" style="padding:2px 8px;font-size:10px" onclick="delItem('${cat.id}','${it.id}')">삭제</button></div>`;
-    });
-    h+=`</div><div class="mgr-add">
-      <input type="text" id="newItem_${cat.id}" placeholder="새 상품명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1">
-      <input type="number" id="newItemInit_${cat.id}" placeholder="기초금액" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;width:120px;font-family:'DM Mono',monospace">
-      <button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addItem('${cat.id}')">+ 추가</button>
-    </div></div>`;
-  });
-  h+=`<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px">
-    <div style="font-weight:600;font-size:13px;margin-bottom:10px">새 카테고리 추가</div>
-    <div class="mgr-add">
-      <input type="text" id="newCatName" placeholder="카테고리명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1">
-      <button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addCat()">+ 추가</button>
-    </div></div>
-    <div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end">
-      <button class="btn bd" onclick="if(confirm('모든 데이터를 초기화하시겠습니까?')){Object.values(SK).forEach(k=>localStorage.removeItem(k));closeMgr();render()}">전체 초기화</button>
-      <button class="btn bp" onclick="closeMgr()">닫기</button>
-    </div></div></div>`;
-  document.getElementById('modalRoot').innerHTML=h;
-}
+function openMgr(){const cats=getCats();let h=`<div class="modal-bg" onclick="if(event.target===this)closeMgr()"><div class="modal"><h3>⚙ 자산 관리<button class="modal-close" onclick="closeMgr()">✕</button></h3><div class="nb">카테고리 및 자산 항목을 추가/삭제할 수 있습니다.</div>`;cats.forEach(cat=>{h+=`<div style="margin-bottom:20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div class="cd" style="background:${cat.color}"></div><span style="font-weight:700;font-size:14px">${cat.name}</span><button class="btn bd" style="padding:3px 10px;font-size:10px;margin-left:auto" onclick="delCat('${cat.id}')">카테고리 삭제</button></div><div class="mgr">`;cat.items.forEach(it=>{if(it.name==='현금')return;h+=`<div class="mgr-item"><span>${it.name}</span><span class="am" style="color:var(--t3)">기초: ${ff(it.init)}</span><button class="btn bd" style="padding:2px 8px;font-size:10px" onclick="delItem('${cat.id}','${it.id}')">삭제</button></div>`});h+=`</div><div class="mgr-add"><input type="text" id="newItem_${cat.id}" placeholder="새 상품명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><input type="number" id="newItemInit_${cat.id}" placeholder="기초금액" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;width:120px;font-family:'DM Mono',monospace"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addItem('${cat.id}')">+ 추가</button></div></div>`});h+=`<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">새 카테고리 추가</div><div class="mgr-add"><input type="text" id="newCatName" placeholder="카테고리명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addCat()">+ 추가</button></div></div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn bd" onclick="if(confirm('모든 데이터를 초기화하시겠습니까?')){Object.values(SK).forEach(k=>localStorage.removeItem(k));closeMgr();render()}">전체 초기화</button><button class="btn bp" onclick="closeMgr()">닫기</button></div></div></div>`;document.getElementById('modalRoot').innerHTML=h}
 function closeMgr(){document.getElementById('modalRoot').innerHTML='';render()}
 function addCat(){const name=document.getElementById('newCatName').value.trim();if(!name){alert('카테고리명을 입력하세요.');return}const cats=getCats();cats.push({id:uid(),name,color:CAT_COLORS[cats.length%CAT_COLORS.length],items:[]});saveCats(cats);openMgr()}
 function delCat(catId){if(!confirm('이 카테고리를 삭제하시겠습니까?'))return;saveCats(getCats().filter(c=>c.id!==catId));openMgr()}
@@ -538,4 +391,4 @@ function delItem(catId,itemId){if(!confirm('이 상품을 삭제하시겠습니�
 
 // =========== INIT ===========
 renderTabs();render();
-window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(drawBar,50)});
+window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50)});
