@@ -331,119 +331,198 @@ function renderPnlTable(){
 
 
 // =========== 선물거래 ===========
-const FUTURES_DATA={
-  date:'2026-04-03',
+const SK_FUT='pt_futures_v1';
+const DEFAULT_FUT={
   fxRate:1505.8,
   budget:200000000,
   stopLoss:50000000,
   cash:200000000,
-  mtd:8049857,
-  ytd:-18964941,
-  plPct:0.0402,
   positions:[
-    {name:'USDKRW',cat:'FX',date:'2026-02-10',contracts:0,entry:1447.6,mkt:1505.8,pnl:0,pos:0,unit:12500000,ccy:'KRW'},
-    {name:'JY (엔선물)',cat:'FX',date:'2026-01-01',contracts:0,entry:6971,mkt:6415.5,pnl:0,pos:0,unit:12500000,ccy:'KRW'},
-    {name:'EUR (유로)',cat:'FX',date:'2026-01-01',contracts:0,entry:1.16285,mkt:1.1662,pnl:0,pos:0,unit:125000,ccy:'USD'},
-    {name:'KTB 3년',cat:'Bond',date:'2026-02-20',contracts:0,entry:105.41,mkt:105.54,pnl:0,pos:0,unit:1000000,ccy:'KRW'},
-    {name:'KTB 10년',cat:'Bond',date:'2026-02-20',contracts:0,entry:111.89,mkt:112.85,pnl:0,pos:0,unit:1000000,ccy:'KRW'},
-    {name:'US Treasury 10Y (ZN)',cat:'Bond',date:'2026-02-23',contracts:-2,entry:113.2125,mkt:110.96875,pnl:6757278,pos:-2,unit:1000,ccy:'USD'},
-    {name:'KOSPI200',cat:'EQ',date:'2026-04-03',contracts:1,entry:775,mkt:799.3,pnl:6075000,pos:1,unit:250000,ccy:'KRW'},
-    {name:'KQ150',cat:'EQ',date:'2026-02-20',contracts:0,entry:2025.1,mkt:2059.3,pnl:0,pos:0,unit:10000,ccy:'KRW'},
-    {name:'Micro Nasdaq (MNQ)',cat:'EQ',date:'2026-03-12',contracts:2,entry:25006,mkt:24155.75,pnl:-5121226,pos:2,unit:2,ccy:'USD'},
-    {name:'Micro S&P (MES)',cat:'EQ',date:'2026-03-22',contracts:4,entry:6775.25,mkt:6607.25,pnl:-5059488,pos:4,unit:5,ccy:'USD'},
-    {name:'Crude Oil (MCL)',cat:'Comm',date:'2026-02-23',contracts:0,entry:65.98,mkt:88.3,pnl:0,pos:0,unit:100,ccy:'USD'},
-    {name:'Micro Gold (MGC)',cat:'Comm',date:'2026-03-18',contracts:5,entry:4608,mkt:4679.7,pnl:5398293,pos:5,unit:10,ccy:'USD'}
+    {id:'f01',name:'USDKRW',cat:'FX',date:'2026-02-10',contracts:0,entry:1447.6,mkt:1505.8,pos:0,mult:12500000,ccy:'KRW'},
+    {id:'f02',name:'JY (엔선물)',cat:'FX',date:'2026-01-01',contracts:0,entry:6971,mkt:6415.5,pos:0,mult:12500000,ccy:'KRW'},
+    {id:'f03',name:'EUR (유로)',cat:'FX',date:'2026-01-01',contracts:0,entry:1.16285,mkt:1.1662,pos:0,mult:125000,ccy:'USD'},
+    {id:'f04',name:'KTB 3년',cat:'Bond',date:'2026-02-20',contracts:0,entry:105.41,mkt:105.54,pos:0,mult:1000000,ccy:'KRW'},
+    {id:'f05',name:'KTB 10년',cat:'Bond',date:'2026-02-20',contracts:0,entry:111.89,mkt:112.85,pos:0,mult:1000000,ccy:'KRW'},
+    {id:'f06',name:'US Treasury 10Y (ZN)',cat:'Bond',date:'2026-02-23',contracts:-2,entry:113.2125,mkt:110.96875,pos:-2,mult:1000,ccy:'USD'},
+    {id:'f07',name:'KOSPI200',cat:'EQ',date:'2026-04-03',contracts:1,entry:775,mkt:799.3,pos:1,mult:250000,ccy:'KRW'},
+    {id:'f08',name:'KQ150',cat:'EQ',date:'2026-02-20',contracts:0,entry:2025.1,mkt:2059.3,pos:0,mult:10000,ccy:'KRW'},
+    {id:'f09',name:'Micro Nasdaq (MNQ)',cat:'EQ',date:'2026-03-12',contracts:2,entry:25006,mkt:24155.75,pos:2,mult:2,ccy:'USD'},
+    {id:'f10',name:'Micro S&P (MES)',cat:'EQ',date:'2026-03-22',contracts:4,entry:6775.25,mkt:6607.25,pos:4,mult:5,ccy:'USD'},
+    {id:'f11',name:'Crude Oil (MCL)',cat:'Comm',date:'2026-02-23',contracts:0,entry:65.98,mkt:88.3,pos:0,mult:100,ccy:'USD'},
+    {id:'f12',name:'Micro Gold (MGC)',cat:'Comm',date:'2026-03-18',contracts:5,entry:4608,mkt:4679.7,pos:5,mult:10,ccy:'USD'}
   ],
-  byClass:[
-    {name:'EQ',pnl2026:-4105714,itd:-4105714},
-    {name:'FX',pnl2026:0,itd:0},
-    {name:'Bond',pnl2026:6757278,itd:6757278},
-    {name:'Comm',pnl2026:5398293,itd:5398293}
-  ],
-  monthly:[
-    {month:1,pnl:17207535,cum:17207535},
-    {month:2,pnl:-8113343,cum:9094192},
-    {month:3,pnl:-28059133,cum:-18964941}
-  ]
+  monthly:[{month:1,pnl:17207535},{month:2,pnl:-8113343},{month:3,pnl:-28059133}]
 };
 
+function getFut(){return lsG(SK_FUT)||JSON.parse(JSON.stringify(DEFAULT_FUT))}
+function saveFut(d){lsS(SK_FUT,d)}
+
+function calcPnl(p,fxRate){
+  if(p.contracts===0)return 0;
+  const diff=(p.mkt-p.entry)*p.contracts*p.mult;
+  return p.ccy==='USD'?Math.round(diff*fxRate):Math.round(diff);
+}
+
 function rFutures(){
-  const d=FUTURES_DATA;
-  const activePos=d.positions.filter(p=>p.contracts!==0);
-  const watchPos=d.positions.filter(p=>p.contracts===0);
-  const totalPnl=activePos.reduce((s,p)=>s+p.pnl,0);
+  const d=getFut();
+  const fx=d.fxRate;
+  const active=d.positions.filter(p=>p.contracts!==0);
+  const watch=d.positions.filter(p=>p.contracts===0);
+  const totalPnl=active.reduce((s,p)=>s+calcPnl(p,fx),0);
+
+  // Build by-class
+  const byCls={};d.positions.forEach(p=>{
+    if(!byCls[p.cat])byCls[p.cat]=0;
+    byCls[p.cat]+=calcPnl(p,fx);
+  });
+  const totalClsPnl=Object.values(byCls).reduce((s,v)=>s+v,0);
+
+  // Monthly cumulative
+  let cum=0;const monthData=d.monthly.map(m=>{cum+=m.pnl;return{...m,cum}});
+  const ytd=cum;
+  const mtd=d.monthly.length?d.monthly[d.monthly.length-1].pnl+totalPnl:totalPnl;
+  const plPct=d.budget?(mtd/d.budget):0;
 
   let h=`
+    <div class="nb">📈 <b>선물거래 블로터</b> — 현재가를 직접 입력하여 실시간 손익을 확인합니다. 환율 변경 시 달러 포지션이 자동 환산됩니다.</div>
+
+    <div class="fc" style="gap:8px">
+      <div class="fg"><label>USD/KRW 환율</label>
+        <input type="text" id="futFx" value="${ff(fx)}" style="min-width:110px;font-weight:600;color:var(--amber)" onfocus="this.select()"></div>
+      <button class="btn bp" style="min-height:42px" onclick="updateFx()">환율 적용</button>
+      <div style="flex:1"></div>
+      <button class="btn bo2" onclick="openAddPosition()">+ 신규 포지션</button>
+    </div>
+
     <div class="sr" style="grid-template-columns:repeat(3,1fr)">
-      <div class="sb"><div class="sl">MTD 손익</div><div class="sv mono ${d.mtd>=0?'up':'dn'}">${d.mtd>=0?'+':''}${ff(d.mtd)}</div></div>
-      <div class="sb"><div class="sl">YTD 손익</div><div class="sv mono ${d.ytd>=0?'up':'dn'}">${d.ytd>=0?'+':''}${ff(d.ytd)}</div></div>
-      <div class="sb"><div class="sl">수익률 (PL%)</div><div class="sv mono ${d.plPct>=0?'up':'dn'}">${d.plPct>=0?'+':''}${(d.plPct*100).toFixed(2)}%</div></div>
+      <div class="sb"><div class="sl">MTD (미실현 포함)</div><div class="sv mono ${mtd>=0?'up':'dn'}">${mtd>=0?'+':''}${ff(Math.round(mtd))}</div></div>
+      <div class="sb"><div class="sl">YTD 실현손익</div><div class="sv mono ${ytd>=0?'up':'dn'}">${ytd>=0?'+':''}${ff(ytd)}</div></div>
+      <div class="sb"><div class="sl">수익률</div><div class="sv mono ${plPct>=0?'up':'dn'}">${plPct>=0?'+':''}${(plPct*100).toFixed(2)}%</div></div>
     </div>
     <div class="sr" style="grid-template-columns:repeat(3,1fr)">
       <div class="sb"><div class="sl">운용예산</div><div class="sv mono">${fmt(d.budget)}</div></div>
       <div class="sb"><div class="sl">Stop Loss</div><div class="sv mono" style="color:var(--red)">${fmt(d.stopLoss)}</div></div>
-      <div class="sb"><div class="sl">현재환율 (USD/KRW)</div><div class="sv mono" style="color:var(--amber)">${ff(d.fxRate)}</div></div>
+      <div class="sb"><div class="sl">미실현 P&L 합계</div><div class="sv mono ${totalPnl>=0?'up':'dn'}">${totalPnl>=0?'+':''}${ff(totalPnl)}</div></div>
     </div>`;
 
-  // Active positions
-  h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>보유 포지션 (${activePos.length}건)
-    <span style="margin-left:auto;font-size:11px;color:var(--t3)">미실현 P&L: <span class="mono ${totalPnl>=0?'up':'dn'}">${totalPnl>=0?'+':''}${ff(totalPnl)}원</span></span></div>
-    <div class="tbl-scroll"><table style="min-width:700px"><thead><tr>
-      <th>#</th><th>종목</th><th>유형</th><th>진입일</th><th>계약수</th><th>진입가</th><th>현재가</th><th>미실현 P&L</th>
+  // Active positions with inline price edit
+  h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>보유 포지션 (${active.length}건)</div>
+    <div class="tbl-scroll"><table style="min-width:760px"><thead><tr>
+      <th>#</th><th>종목</th><th>유형</th><th>진입일</th><th>계약</th><th>진입가</th><th style="text-align:center">현재가 입력</th><th>미실현 P&L</th><th></th>
     </tr></thead><tbody>`;
-  activePos.forEach((p,i)=>{
+  active.forEach((p,i)=>{
+    const pnl=calcPnl(p,fx);
     const dir=p.contracts>0?'Long':'Short';
-    const dirCls=p.contracts>0?'up':'dn';
     h+=`<tr>
       <td>${i+1}</td><td>${p.name}</td>
-      <td><span class="tg ${p.contracts>0?'ti':'to'}">${dir}</span></td>
+      <td><span class="tg ${p.contracts>0?'ti':'to'}">${dir}</span> <span style="font-size:9px;color:var(--t3)">${p.ccy}</span></td>
       <td class="am">${p.date}</td>
       <td class="am" style="font-weight:600">${Math.abs(p.contracts)}</td>
-      <td class="am">${ff(p.entry)}</td>
-      <td class="am">${ff(p.mkt)}</td>
-      <td class="am ${p.pnl>=0?'up':'dn'}" style="font-weight:600">${p.pnl>=0?'+':''}${ff(p.pnl)}</td>
+      <td class="am">${p.entry}</td>
+      <td style="text-align:center"><input type="text" class="batch-inp" id="fmkt_${p.id}" value="${p.mkt}" style="width:100px" onfocus="this.select()">
+        <button class="btn bp" style="padding:3px 8px;font-size:9px;min-height:28px;margin-left:2px" onclick="updateMkt('${p.id}')">적용</button></td>
+      <td class="am ${pnl>=0?'up':'dn'}" style="font-weight:600">${pnl>=0?'+':''}${ff(pnl)}</td>
+      <td><button class="btn bd" style="padding:3px 8px;font-size:9px;min-height:28px" onclick="closePosition('${p.id}')">청산</button></td>
     </tr>`;
   });
   h+=`</tbody></table></div></div>`;
 
-  // Watchlist (contracts=0)
-  if(watchPos.length){
+  // Watchlist with price edit
+  if(watch.length){
     h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--t3)"></div>관심종목 (미보유)</div>
-      <div class="tbl-scroll"><table style="min-width:500px"><thead><tr>
-        <th>#</th><th>종목</th><th>유형</th><th>현재가</th><th>기준가</th>
+      <div class="tbl-scroll"><table style="min-width:400px"><thead><tr>
+        <th>#</th><th>종목</th><th>유형</th><th style="text-align:center">현재가 입력</th><th>기준가</th>
       </tr></thead><tbody>`;
-    watchPos.forEach((p,i)=>{
-      h+=`<tr><td>${i+1}</td><td>${p.name}</td><td class="am">${p.cat}</td><td class="am">${ff(p.mkt)}</td><td class="am" style="color:var(--t3)">${ff(p.entry)}</td></tr>`;
+    watch.forEach((p,i)=>{
+      h+=`<tr><td>${i+1}</td><td>${p.name}</td><td class="am">${p.cat}</td>
+        <td style="text-align:center"><input type="text" class="batch-inp" id="fmkt_${p.id}" value="${p.mkt}" style="width:100px" onfocus="this.select()">
+        <button class="btn bp" style="padding:3px 8px;font-size:9px;min-height:28px;margin-left:2px" onclick="updateMkt('${p.id}')">적용</button></td>
+        <td class="am" style="color:var(--t3)">${p.entry}</td></tr>`;
     });
     h+=`</tbody></table></div></div>`;
   }
 
-  // Asset class breakdown
+  // Asset class breakdown + monthly chart
   h+=`<div class="cg">
-    <div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>자산군별 손익 (2026)</div>
-      <div class="tbl-scroll"><table style="min-width:300px"><thead><tr><th>자산군</th><th style="text-align:right">P&L (2026)</th><th style="text-align:right">ITD</th></tr></thead><tbody>`;
-  d.byClass.forEach(cl=>{
-    h+=`<tr><td style="text-align:left;font-weight:500">${cl.name}</td>
-      <td class="am ${cl.pnl2026>=0?'up':'dn'}">${cl.pnl2026>=0?'+':''}${ff(cl.pnl2026)}</td>
-      <td class="am ${cl.itd>=0?'up':'dn'}">${cl.itd>=0?'+':''}${ff(cl.itd)}</td></tr>`;
+    <div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>자산군별 미실현 손익</div>
+      <div class="tbl-scroll"><table style="min-width:250px"><thead><tr><th>자산군</th><th style="text-align:right">P&L (원)</th></tr></thead><tbody>`;
+  Object.entries(byCls).forEach(([k,v])=>{
+    h+=`<tr><td style="text-align:left;font-weight:500">${k}</td><td class="am ${v>=0?'up':'dn'}">${v>=0?'+':''}${ff(v)}</td></tr>`;
   });
-  const totalCls=d.byClass.reduce((s,c)=>s+c.pnl2026,0);
-  h+=`<tr class="fr"><td style="text-align:left">Total</td>
-    <td class="am ${totalCls>=0?'up':'dn'}">${totalCls>=0?'+':''}${ff(totalCls)}</td>
-    <td class="am ${totalCls>=0?'up':'dn'}">${totalCls>=0?'+':''}${ff(totalCls)}</td></tr>`;
-  h+=`</tbody></table></div></div>`;
-
-  // Monthly PnL
-  h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--amber)"></div>월별 손익</div>
-    <canvas id="futMonthlyChart" height="200"></canvas></div></div>`;
+  h+=`<tr class="fr"><td style="text-align:left">Total</td><td class="am ${totalClsPnl>=0?'up':'dn'}">${totalClsPnl>=0?'+':''}${ff(totalClsPnl)}</td></tr>`;
+  h+=`</tbody></table></div></div>
+    <div class="cc"><div class="ct"><div class="cd" style="background:var(--amber)"></div>월별 실현손익</div><canvas id="futMonthlyChart" height="200"></canvas></div></div>`;
 
   document.getElementById('paneActive').innerHTML=h;
   setTimeout(drawFutMonthly,50);
 }
 
+function updateFx(){
+  const v=parseFloat(document.getElementById('futFx').value.replace(/,/g,''));
+  if(isNaN(v)||v<=0){alert('올바른 환율을 입력하세요.');return}
+  const d=getFut();d.fxRate=v;saveFut(d);render();
+}
+
+function updateMkt(id){
+  const inp=document.getElementById('fmkt_'+id);if(!inp)return;
+  const v=parseFloat(inp.value.replace(/,/g,''));
+  if(isNaN(v)){alert('올바른 가격을 입력하세요.');return}
+  const d=getFut();const p=d.positions.find(x=>x.id===id);
+  if(p){p.mkt=v;saveFut(d);render()}
+}
+
+function closePosition(id){
+  if(!confirm('이 포지션을 청산(계약수 0)으로 변경하시겠습니까?\n실현 손익은 월별 손익에 수동으로 반영하세요.'))return;
+  const d=getFut();const p=d.positions.find(x=>x.id===id);
+  if(p){p.contracts=0;p.pos=0;saveFut(d);render()}
+}
+
+function openAddPosition(){
+  const cats=['EQ','FX','Bond','Comm'];
+  const catOpts=cats.map(c=>`<option value="${c}">${c}</option>`).join('');
+  let h=`<div class="modal-bg" onclick="if(event.target===this)closeAddPos()"><div class="modal">
+    <h3>+ 신규 포지션 추가<button class="modal-close" onclick="closeAddPos()">✕</button></h3>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="fg"><label>종목명</label><input type="text" id="npName" placeholder="예: Micro Nasdaq (MNQ)"></div>
+      <div style="display:flex;gap:10px">
+        <div class="fg" style="flex:1"><label>자산군</label><select id="npCat">${catOpts}</select></div>
+        <div class="fg" style="flex:1"><label>통화</label><select id="npCcy"><option value="KRW">KRW</option><option value="USD">USD</option></select></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="fg" style="flex:1"><label>계약수 (+매수/-매도)</label><input type="number" id="npContracts" placeholder="예: 2 또는 -3"></div>
+        <div class="fg" style="flex:1"><label>계약 승수</label><input type="number" id="npMult" placeholder="예: 5"></div>
+      </div>
+      <div style="display:flex;gap:10px">
+        <div class="fg" style="flex:1"><label>진입가</label><input type="text" id="npEntry" placeholder="진입 가격"></div>
+        <div class="fg" style="flex:1"><label>현재가</label><input type="text" id="npMkt" placeholder="현재 시장가"></div>
+      </div>
+      <div class="fg"><label>진입일</label><input type="date" id="npDate" value="${today()}"></div>
+      <button class="btn bp" style="width:100%;margin-top:4px" onclick="saveNewPosition()">포지션 추가</button>
+    </div>
+  </div></div>`;
+  document.getElementById('modalRoot').innerHTML=h;
+}
+function closeAddPos(){document.getElementById('modalRoot').innerHTML=''}
+
+function saveNewPosition(){
+  const name=document.getElementById('npName').value.trim();
+  const cat=document.getElementById('npCat').value;
+  const ccy=document.getElementById('npCcy').value;
+  const contracts=parseInt(document.getElementById('npContracts').value);
+  const mult=parseFloat(document.getElementById('npMult').value);
+  const entry=parseFloat(document.getElementById('npEntry').value.replace(/,/g,''));
+  const mkt=parseFloat(document.getElementById('npMkt').value.replace(/,/g,''));
+  const date=document.getElementById('npDate').value;
+  if(!name||isNaN(contracts)||isNaN(mult)||isNaN(entry)||isNaN(mkt)||!date){
+    alert('모든 필드를 입력하세요.');return}
+  const d=getFut();
+  d.positions.push({id:uid(),name,cat,date,contracts,entry,mkt,pos:contracts,mult,ccy});
+  saveFut(d);closeAddPos();render();
+}
+
 function drawFutMonthly(){
   const cv=document.getElementById('futMonthlyChart');if(!cv)return;
-  const d=FUTURES_DATA.monthly;
+  const d=getFut().monthly;if(!d.length)return;
   const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.getBoundingClientRect();
   cv.width=rect.width*dpr;cv.height=200*dpr;ctx.scale(dpr,dpr);
   const W=rect.width,H=200;
