@@ -302,9 +302,7 @@ function loadPrevDay(){
     }
   });
   const dateInfo=[...usedDates].sort().join(', ');
-  alert(filled+'개 상품 금액을 불러왔습니다.
-(기준: '+dateInfo+')
-변경이 필요한 상품만 수정 후 저장하세요.');
+  alert(filled+'개 상품 금액을 불러왔습니다. (기준: '+dateInfo+') 변경이 필요한 상품만 수정 후 저장하세요.');
 }
 function saveBatch(){
   const date=document.getElementById('batchDate').value;if(!date){alert('날짜를 선택하세요.');return}
