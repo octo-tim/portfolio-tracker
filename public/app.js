@@ -597,29 +597,27 @@ function delDR(id){saveDaily(getDaily().filter(r=>r.id!==id));render()}
 function drawCum(recs){const cv=document.getElementById('cumC');if(!cv)return;const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);const W=rect.width,H=320;const bd={};recs.forEach(r=>{if(!bd[r.date])bd[r.date]=0;bd[r.date]+=r.bal});const ds=Object.keys(bd).sort(),vs=ds.map(d=>bd[d]);if(vs.length<2)return;const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(77,142,255,.15)');gr.addColorStop(1,'rgba(77,142,255,0)');ctx.fillStyle=gr;ctx.fill();ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#4d8eff';ctx.lineWidth=2;ctx.stroke();vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#4d8eff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)})}
 function drawPD(recs){const el=document.getElementById('pdC');if(!el)return;const bp={};recs.forEach(r=>{if(!bp[r.product])bp[r.product]=[];bp[r.product].push(r)});let h='<div class="tbl-scroll"><table><thead><tr><th>상품</th><th>최초 기록</th><th>최근 기록</th><th>기간 손익</th><th>기록 수</th></tr></thead><tbody>';Object.entries(bp).forEach(([p,rr2])=>{rr2.sort((a,b)=>a.date.localeCompare(b.date));const f=rr2[0].bal,l=rr2[rr2.length-1].bal,d2=l-f;h+=`<tr><td style="text-align:left">${p}</td><td class="am">${rr2[0].date} / ${ff(f)}</td><td class="am">${rr2[rr2.length-1].date} / ${ff(l)}</td><td class="am ${d2>=0?'up':'dn'}">${d2>=0?'+':''}${ff(d2)}</td><td class="am">${rr2.length}건</td></tr>`});h+='</tbody></table></div>';el.innerHTML=h}
 
-// =========== 전체 투자자산 (금융투자는 합계만, 나머지 수정 가능) ===========
+// =========== 전체 투자자산 (금융투자 합계만, 나머지 수정+추가 가능) ===========
 function rTotal(){
   const c=live();const cats=getCats();let h='',gi=0;
   const allBal=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.bal>0)allBal.push({name:it.name,val:it.bal})}));
 
   c.forEach((cat,ci)=>{
-    const vis=cat.items.filter(x=>x.init||x.bal);if(!vis.length)return;
+    const vis=cat.items.filter(x=>x.init||x.bal);if(!vis.length&&ci>0&&!cats[ci])return;
     const cI=vis.reduce((s,i)=>s+i.init,0),cB=vis.reduce((s,i)=>s+i.bal,0),cP=cB-cI,cPp=cI?pct(cB,cI):0;
     const catObj=cats.find(x=>x.name===cat.name);const catId=catObj?catObj.id:'';
-    const isFin=(ci===0); // 첫번째 카테고리 = 금융투자
+    const isFin=(ci===0);
 
     h+=`<div class="tw" style="margin-bottom:20px"><div class="ch"><div class="cd" style="background:${cat.color}"></div>${cat.name}
       <span style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:400">평가합계: <span class="mono" style="color:var(--t1)">${fmt(cB)}</span></span></div>`;
 
     if(isFin){
-      // 금융투자: 항목 표시 없이 합계 1행만
       h+=`<div class="tbl-scroll"><table style="min-width:400px"><thead><tr><th></th><th>구분</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th></tr></thead><tbody>
         <tr class="fr"><td></td><td>금융투자 합계 (${vis.length}개 상품)</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td>
           <td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td>
           <td class="am ${cPp>=0?'up':'dn'}">${cPp>=0?'+':''}${cPp.toFixed(2)}%</td></tr>
         </tbody></table></div>`;
     } else {
-      // 기타 카테고리: 항목별 표시 + 잔액 수정
       h+=`<div class="tbl-scroll"><table style="min-width:500px"><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th style="text-align:center">잔액 수정</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
       vis.forEach(it=>{gi++;const pnl2=it.bal-it.init,p2=it.init?pct(it.bal,it.init):0;
         const origItem=catObj?catObj.items.find(x=>x.name===it.name):null;
@@ -632,6 +630,14 @@ function rTotal(){
       h+=`<tr class="fr"><td></td><td>소계</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td><td></td>
         <td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td>
         <td class="am ${cPp>=0?'up':'dn'}">${cI?(cPp>=0?'+':'')+cPp.toFixed(2)+'%':'-'}</td></tr></tbody></table></div>`;
+
+      // 상품 추가 폼
+      h+=`<div style="padding:10px 16px;display:flex;gap:6px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border)">
+        <input type="text" id="taName_${catId}" placeholder="상품명" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;flex:1;min-width:100px">
+        <input type="number" id="taInit_${catId}" placeholder="기초금액" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;width:110px;font-family:'DM Mono',monospace">
+        <input type="number" id="taBal_${catId}" placeholder="현재잔액" style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:12px;width:110px;font-family:'DM Mono',monospace">
+        <button class="btn bg2" style="padding:6px 14px;font-size:11px;min-height:34px" onclick="addTotalItem('${catId}')">+ 추가</button>
+      </div>`;
     }
     h+=`</div>`;
   });
@@ -657,6 +663,19 @@ function saveItemBal(catId,itemId){
   if(!cat)return;
   const item=cat.items.find(i=>i.id===itemId);
   if(item){item.bal=num;saveCats(cats);render()}
+}
+function addTotalItem(catId){
+  const nameEl=document.getElementById('taName_'+catId);
+  const initEl=document.getElementById('taInit_'+catId);
+  const balEl=document.getElementById('taBal_'+catId);
+  const name=nameEl?nameEl.value.trim():'';
+  const init=initEl?parseInt(initEl.value)||0:0;
+  const bal=balEl?parseInt(balEl.value)||init:init;
+  if(!name){alert('상품명을 입력하세요.');return}
+  const cats=getCats();const cat=cats.find(c=>c.id===catId);
+  if(!cat)return;
+  cat.items.push({id:uid(),name,init,bal});
+  saveCats(cats);render();
 }
 function donut(data){const total=data.reduce((s,d)=>s+d.val,0);if(!total)return'<div class="em">데이터 없음</div>';const R=72,CX=90,CY=90,SW=18,ci=2*Math.PI*R;let cu=0,p='';data.forEach(d=>{const f=d.val/total,da=ci*f,ga=ci-da,o=-ci*cu+ci*.25;p+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${d.color}" stroke-width="${SW}" stroke-dasharray="${da} ${ga}" stroke-dashoffset="${o}" opacity=".85"/>`;cu+=f});const lg2=data.map(d=>`<div class="li"><div class="ld" style="background:${d.color}"></div><span class="ln">${d.name}</span><span class="lp">${(d.val/total*100).toFixed(1)}%</span></div>`).join('');return`<div class="dw"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="${SW}"/>${p}<text x="${CX}" y="${CY-6}" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Outfit">합계</text><text x="${CX}" y="${CY+12}" text-anchor="middle" fill="var(--t1)" font-size="13" font-weight="600" font-family="DM Mono">${fmt(total)}</text></svg><div class="lg">${lg2}</div></div>`}
 
