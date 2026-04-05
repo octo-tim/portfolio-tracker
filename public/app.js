@@ -277,18 +277,34 @@ function onBatchInput(el){
   }else{diffEl.innerHTML='-';el.classList.remove('batch-changed')}
 }
 function loadPrevDay(){
-  const hist=getBalHist();if(!hist.length){alert('이전 기록이 없습니다.');return}
   const cats=getCats(),finCat=cats[0];if(!finCat)return;
-  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
-  // 각 상품별로 가장 최근 기록을 찾음 (전일 기록이 없어도 최신 기록 사용)
+  const items=finCat.items.filter(x=>x.name!=="현금"&&(x.init||x.bal));
+  const hist=getBalHist();
   const latestByItem={};
   hist.forEach(r=>{if(!latestByItem[r.itemId]||r.date>latestByItem[r.itemId].date)latestByItem[r.itemId]=r});
   let filled=0;let usedDates=new Set();
-  items.forEach(it=>{const inp=document.getElementById('batch_'+it.id);if(!inp)return;
+  items.forEach(it=>{
+    const inp=document.getElementById('batch_'+it.id);if(!inp)return;
     const rec=latestByItem[it.id];
-    if(rec){inp.value=ff(rec.bal);filled++;usedDates.add(rec.date);onBatchInput(inp)}});
+    if(rec){
+      inp.value=it.bal.toLocaleString();usedDates.add(rec.date);
+    }else{
+      inp.value=it.bal.toLocaleString();usedDates.add('기초값');
+    }
+    filled++;
+    const raw=inp.value.replace(/,/g,'');
+    const num=parseInt(raw);
+    const cur=parseInt(inp.dataset.cur);
+    const diffEl=document.getElementById('diff_'+inp.dataset.id);
+    if(!isNaN(num)&&diffEl){
+      const d2=num-cur;
+      diffEl.innerHTML='<span class="'+(d2>=0?'up':'dn')+'">'+(d2>=0?'+':'')+d2.toLocaleString()+'</span>';
+    }
+  });
   const dateInfo=[...usedDates].sort().join(', ');
-  alert(`최근 기록 기준 ${filled}개 상품 금액을 불러왔습니다.\n(기준일: ${dateInfo||'-'})\n변경이 필요한 상품만 수정 후 저장하세요.`);
+  alert(filled+'개 상품 금액을 불러왔습니다.
+(기준: '+dateInfo+')
+변경이 필요한 상품만 수정 후 저장하세요.');
 }
 function saveBatch(){
   const date=document.getElementById('batchDate').value;if(!date){alert('날짜를 선택하세요.');return}
