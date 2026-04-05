@@ -278,14 +278,17 @@ function onBatchInput(el){
 }
 function loadPrevDay(){
   const hist=getBalHist();if(!hist.length){alert('이전 기록이 없습니다.');return}
-  const dates=[...new Set(hist.map(h=>h.date))].sort();
-  const lastDate=dates[dates.length-1],lastRecs=hist.filter(h=>h.date===lastDate);
   const cats=getCats(),finCat=cats[0];if(!finCat)return;
   const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
-  let filled=0;
+  // 각 상품별로 가장 최근 기록을 찾음 (전일 기록이 없어도 최신 기록 사용)
+  const latestByItem={};
+  hist.forEach(r=>{if(!latestByItem[r.itemId]||r.date>latestByItem[r.itemId].date)latestByItem[r.itemId]=r});
+  let filled=0;let usedDates=new Set();
   items.forEach(it=>{const inp=document.getElementById('batch_'+it.id);if(!inp)return;
-    const rec=lastRecs.find(r=>r.itemId===it.id);if(rec){inp.value=ff(rec.bal);filled++;onBatchInput(inp)}});
-  alert(`${lastDate} 기준 ${filled}개 상품 금액을 불러왔습니다.\n변경이 필요한 상품만 수정 후 저장하세요.`);
+    const rec=latestByItem[it.id];
+    if(rec){inp.value=ff(rec.bal);filled++;usedDates.add(rec.date);onBatchInput(inp)}});
+  const dateInfo=[...usedDates].sort().join(', ');
+  alert(`최근 기록 기준 ${filled}개 상품 금액을 불러왔습니다.\n(기준일: ${dateInfo||'-'})\n변경이 필요한 상품만 수정 후 저장하세요.`);
 }
 function saveBatch(){
   const date=document.getElementById('batchDate').value;if(!date){alert('날짜를 선택하세요.');return}
