@@ -597,33 +597,52 @@ function delDR(id){saveDaily(getDaily().filter(r=>r.id!==id));render()}
 function drawCum(recs){const cv=document.getElementById('cumC');if(!cv)return;const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);const W=rect.width,H=320;const bd={};recs.forEach(r=>{if(!bd[r.date])bd[r.date]=0;bd[r.date]+=r.bal});const ds=Object.keys(bd).sort(),vs=ds.map(d=>bd[d]);if(vs.length<2)return;const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(77,142,255,.15)');gr.addColorStop(1,'rgba(77,142,255,0)');ctx.fillStyle=gr;ctx.fill();ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#4d8eff';ctx.lineWidth=2;ctx.stroke();vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#4d8eff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)})}
 function drawPD(recs){const el=document.getElementById('pdC');if(!el)return;const bp={};recs.forEach(r=>{if(!bp[r.product])bp[r.product]=[];bp[r.product].push(r)});let h='<div class="tbl-scroll"><table><thead><tr><th>상품</th><th>최초 기록</th><th>최근 기록</th><th>기간 손익</th><th>기록 수</th></tr></thead><tbody>';Object.entries(bp).forEach(([p,rr2])=>{rr2.sort((a,b)=>a.date.localeCompare(b.date));const f=rr2[0].bal,l=rr2[rr2.length-1].bal,d2=l-f;h+=`<tr><td style="text-align:left">${p}</td><td class="am">${rr2[0].date} / ${ff(f)}</td><td class="am">${rr2[rr2.length-1].date} / ${ff(l)}</td><td class="am ${d2>=0?'up':'dn'}">${d2>=0?'+':''}${ff(d2)}</td><td class="am">${rr2.length}건</td></tr>`});h+='</tbody></table></div>';el.innerHTML=h}
 
-// =========== 전체 투자자산 (잔액 수정 가능) ===========
+// =========== 전체 투자자산 (금융투자는 합계만, 나머지 수정 가능) ===========
 function rTotal(){
   const c=live();const cats=getCats();let h='',gi=0;
   const allBal=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.bal>0)allBal.push({name:it.name,val:it.bal})}));
-  c.forEach((cat,ci)=>{const vis=cat.items.filter(x=>x.init||x.bal);if(!vis.length)return;
+
+  c.forEach((cat,ci)=>{
+    const vis=cat.items.filter(x=>x.init||x.bal);if(!vis.length)return;
     const cI=vis.reduce((s,i)=>s+i.init,0),cB=vis.reduce((s,i)=>s+i.bal,0),cP=cB-cI,cPp=cI?pct(cB,cI):0;
     const catObj=cats.find(x=>x.name===cat.name);const catId=catObj?catObj.id:'';
+    const isFin=(ci===0); // 첫번째 카테고리 = 금융투자
+
     h+=`<div class="tw" style="margin-bottom:20px"><div class="ch"><div class="cd" style="background:${cat.color}"></div>${cat.name}
-      <span style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:400">평가합계: <span class="mono" style="color:var(--t1)">${fmt(cB)}</span></span></div>
-      <div class="tbl-scroll"><table><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th style="text-align:center">잔액 수정</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
-    vis.forEach(it=>{gi++;const pnl2=it.bal-it.init,p2=it.init?pct(it.bal,it.init):0;
-      const origItem=catObj?catObj.items.find(x=>x.name===it.name):null;
-      const itemId=origItem?origItem.id:it.name;
-      h+=`<tr><td>${gi}</td><td>${it.name}</td><td class="am">${ff(it.init)}</td><td class="am">${ff(it.bal)}</td>
-        <td style="text-align:center"><input type="text" class="batch-inp" id="te_${catId}_${itemId}" value="${ff(it.bal)}" style="width:120px;text-align:right" onfocus="this.select()">
-        <button class="btn bp" style="padding:3px 8px;font-size:9px;margin-left:4px" onclick="saveItemBal('${catId}','${itemId}')">저장</button></td>
-        <td class="am ${pnl2>=0?'up':'dn'}">${pnl2>=0?'+':''}${ff(pnl2)}</td>
-        <td class="am ${p2>=0?'up':'dn'}">${it.init?(p2>=0?'+':'')+p2.toFixed(2)+'%':'-'}</td></tr>`});
-    h+=`<tr class="fr"><td></td><td>소계</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td><td></td>
-      <td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td>
-      <td class="am ${cPp>=0?'up':'dn'}">${cI?(cPp>=0?'+':'')+cPp.toFixed(2)+'%':'-'}</td></tr></tbody></table></div>`});
+      <span style="margin-left:auto;font-size:11px;color:var(--t3);font-weight:400">평가합계: <span class="mono" style="color:var(--t1)">${fmt(cB)}</span></span></div>`;
+
+    if(isFin){
+      // 금융투자: 항목 표시 없이 합계 1행만
+      h+=`<div class="tbl-scroll"><table style="min-width:400px"><thead><tr><th></th><th>구분</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th></tr></thead><tbody>
+        <tr class="fr"><td></td><td>금융투자 합계 (${vis.length}개 상품)</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td>
+          <td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td>
+          <td class="am ${cPp>=0?'up':'dn'}">${cPp>=0?'+':''}${cPp.toFixed(2)}%</td></tr>
+        </tbody></table></div>`;
+    } else {
+      // 기타 카테고리: 항목별 표시 + 잔액 수정
+      h+=`<div class="tbl-scroll"><table style="min-width:500px"><thead><tr><th>#</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th style="text-align:center">잔액 수정</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
+      vis.forEach(it=>{gi++;const pnl2=it.bal-it.init,p2=it.init?pct(it.bal,it.init):0;
+        const origItem=catObj?catObj.items.find(x=>x.name===it.name):null;
+        const itemId=origItem?origItem.id:it.name;
+        h+=`<tr><td>${gi}</td><td>${it.name}</td><td class="am">${ff(it.init)}</td><td class="am">${ff(it.bal)}</td>
+          <td style="text-align:center"><input type="text" class="batch-inp" id="te_${catId}_${itemId}" value="${ff(it.bal)}" style="width:120px;text-align:right" onfocus="this.select()">
+          <button class="btn bp" style="padding:3px 8px;font-size:9px;min-height:28px;margin-left:4px" onclick="saveItemBal('${catId}','${itemId}')">저장</button></td>
+          <td class="am ${pnl2>=0?'up':'dn'}">${pnl2>=0?'+':''}${ff(pnl2)}</td>
+          <td class="am ${p2>=0?'up':'dn'}">${it.init?(p2>=0?'+':'')+p2.toFixed(2)+'%':'-'}</td></tr>`});
+      h+=`<tr class="fr"><td></td><td>소계</td><td class="am">${ff(cI)}</td><td class="am">${ff(cB)}</td><td></td>
+        <td class="am ${cP>=0?'up':'dn'}">${cP>=0?'+':''}${ff(cP)}</td>
+        <td class="am ${cPp>=0?'up':'dn'}">${cI?(cPp>=0?'+':'')+cPp.toFixed(2)+'%':'-'}</td></tr></tbody></table></div>`;
+    }
+    h+=`</div>`;
+  });
+
   const all2=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all2.push(it)}));
   const gI=all2.reduce((s,i)=>s+i.init,0),gB=all2.reduce((s,i)=>s+i.bal,0),gP=gB-gI,gPp=pct(gB,gI);
-  h+=`<div class="tw"><table><tbody><tr class="fr" style="font-size:14px"><td style="width:36px"></td><td style="text-align:left;font-weight:800">총 합계</td>
-    <td class="am">${ff(gI)}</td><td class="am">${ff(gB)}</td><td></td>
+  h+=`<div class="tw"><div class="tbl-scroll"><table style="min-width:400px"><tbody><tr class="fr" style="font-size:14px"><td style="width:36px"></td><td style="text-align:left;font-weight:800">총 합계</td>
+    <td class="am">${ff(gI)}</td><td class="am">${ff(gB)}</td>
     <td class="am ${gP>=0?'up':'dn'}">${gP>=0?'+':''}${ff(gP)}</td>
-    <td class="am ${gPp>=0?'up':'dn'}">${gPp>=0?'+':''}${gPp.toFixed(2)}%</td></tr></tbody></table></div>`;
+    <td class="am ${gPp>=0?'up':'dn'}">${gPp>=0?'+':''}${gPp.toFixed(2)}%</td></tr></tbody></table></div></div>`;
+
   h+='<div class="cg">';const catData=c.map(x=>({name:x.name,val:x.items.reduce((s,i)=>s+Math.max(i.bal,0),0),color:x.color})).filter(x=>x.val>0);
   h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>카테고리별 비중</div>${donut(catData)}</div>`;
   allBal.sort((a,b)=>b.val-a.val);h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--green)"></div>상품별 잔액 TOP 8</div>${donut(allBal.slice(0,8).map((p,i)=>({...p,color:PAL[i%PAL.length]})))}</div>`;h+='</div>';
