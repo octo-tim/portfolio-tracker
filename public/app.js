@@ -123,7 +123,7 @@ function getDailyPnLSeries(){
 document.getElementById('hdrDate').textContent=`${today()} 기준 · 개인 투자 현황`;
 
 // =========== TABS ===========
-const TABS=[{id:'fin',label:'금융투자자산'},{id:'cash',label:'현금 입출금'},{id:'cumul',label:'누적 수익 현황'},{id:'total',label:'전체 투자자산'}];
+const TABS=[{id:'fin',label:'금융투자자산'},{id:'futures',label:'선물거래'},{id:'cash',label:'현금 입출금'},{id:'cumul',label:'누적 수익 현황'},{id:'total',label:'전체 투자자산'}];
 let curTab='fin';
 function renderTabs(){document.getElementById('tabBar').innerHTML=TABS.map(t=>`<div class="tab ${t.id===curTab?'on':''}" onclick="go('${t.id}')">${t.label}</div>`).join('')}
 function go(id){curTab=id;renderTabs();render()}
@@ -148,7 +148,7 @@ function renderSum(){
 }
 
 // =========== RENDER ===========
-function render(){renderSum();document.getElementById('mainContent').innerHTML='<div class="pane on" id="paneActive"></div>';({total:rTotal,fin:rFin,cash:rCash,cumul:rCumul})[curTab]()}
+function render(){renderSum();document.getElementById('mainContent').innerHTML='<div class="pane on" id="paneActive"></div>';({total:rTotal,fin:rFin,futures:rFutures,cash:rCash,cumul:rCumul})[curTab]()}
 
 // =========== 금융투자자산 ===========
 function rFin(){
@@ -327,6 +327,142 @@ function renderPnlTable(){
     <td class="am ${tpp>=0?'up':'dn'}">${tpp>=0?'+':''}${tpp.toFixed(2)}%</td></tr>`;
   tbl+='</tbody></table></div>';
   document.getElementById('pnlTableBody').innerHTML=tbl;
+}
+
+
+// =========== 선물거래 ===========
+const FUTURES_DATA={
+  date:'2026-04-03',
+  fxRate:1505.8,
+  budget:200000000,
+  stopLoss:50000000,
+  cash:200000000,
+  mtd:8049857,
+  ytd:-18964941,
+  plPct:0.0402,
+  positions:[
+    {name:'USDKRW',cat:'FX',date:'2026-02-10',contracts:0,entry:1447.6,mkt:1505.8,pnl:0,pos:0,unit:12500000,ccy:'KRW'},
+    {name:'JY (엔선물)',cat:'FX',date:'2026-01-01',contracts:0,entry:6971,mkt:6415.5,pnl:0,pos:0,unit:12500000,ccy:'KRW'},
+    {name:'EUR (유로)',cat:'FX',date:'2026-01-01',contracts:0,entry:1.16285,mkt:1.1662,pnl:0,pos:0,unit:125000,ccy:'USD'},
+    {name:'KTB 3년',cat:'Bond',date:'2026-02-20',contracts:0,entry:105.41,mkt:105.54,pnl:0,pos:0,unit:1000000,ccy:'KRW'},
+    {name:'KTB 10년',cat:'Bond',date:'2026-02-20',contracts:0,entry:111.89,mkt:112.85,pnl:0,pos:0,unit:1000000,ccy:'KRW'},
+    {name:'US Treasury 10Y (ZN)',cat:'Bond',date:'2026-02-23',contracts:-2,entry:113.2125,mkt:110.96875,pnl:6757278,pos:-2,unit:1000,ccy:'USD'},
+    {name:'KOSPI200',cat:'EQ',date:'2026-04-03',contracts:1,entry:775,mkt:799.3,pnl:6075000,pos:1,unit:250000,ccy:'KRW'},
+    {name:'KQ150',cat:'EQ',date:'2026-02-20',contracts:0,entry:2025.1,mkt:2059.3,pnl:0,pos:0,unit:10000,ccy:'KRW'},
+    {name:'Micro Nasdaq (MNQ)',cat:'EQ',date:'2026-03-12',contracts:2,entry:25006,mkt:24155.75,pnl:-5121226,pos:2,unit:2,ccy:'USD'},
+    {name:'Micro S&P (MES)',cat:'EQ',date:'2026-03-22',contracts:4,entry:6775.25,mkt:6607.25,pnl:-5059488,pos:4,unit:5,ccy:'USD'},
+    {name:'Crude Oil (MCL)',cat:'Comm',date:'2026-02-23',contracts:0,entry:65.98,mkt:88.3,pnl:0,pos:0,unit:100,ccy:'USD'},
+    {name:'Micro Gold (MGC)',cat:'Comm',date:'2026-03-18',contracts:5,entry:4608,mkt:4679.7,pnl:5398293,pos:5,unit:10,ccy:'USD'}
+  ],
+  byClass:[
+    {name:'EQ',pnl2026:-4105714,itd:-4105714},
+    {name:'FX',pnl2026:0,itd:0},
+    {name:'Bond',pnl2026:6757278,itd:6757278},
+    {name:'Comm',pnl2026:5398293,itd:5398293}
+  ],
+  monthly:[
+    {month:1,pnl:17207535,cum:17207535},
+    {month:2,pnl:-8113343,cum:9094192},
+    {month:3,pnl:-28059133,cum:-18964941}
+  ]
+};
+
+function rFutures(){
+  const d=FUTURES_DATA;
+  const activePos=d.positions.filter(p=>p.contracts!==0);
+  const watchPos=d.positions.filter(p=>p.contracts===0);
+  const totalPnl=activePos.reduce((s,p)=>s+p.pnl,0);
+
+  let h=`
+    <div class="sr" style="grid-template-columns:repeat(3,1fr)">
+      <div class="sb"><div class="sl">MTD 손익</div><div class="sv mono ${d.mtd>=0?'up':'dn'}">${d.mtd>=0?'+':''}${ff(d.mtd)}</div></div>
+      <div class="sb"><div class="sl">YTD 손익</div><div class="sv mono ${d.ytd>=0?'up':'dn'}">${d.ytd>=0?'+':''}${ff(d.ytd)}</div></div>
+      <div class="sb"><div class="sl">수익률 (PL%)</div><div class="sv mono ${d.plPct>=0?'up':'dn'}">${d.plPct>=0?'+':''}${(d.plPct*100).toFixed(2)}%</div></div>
+    </div>
+    <div class="sr" style="grid-template-columns:repeat(3,1fr)">
+      <div class="sb"><div class="sl">운용예산</div><div class="sv mono">${fmt(d.budget)}</div></div>
+      <div class="sb"><div class="sl">Stop Loss</div><div class="sv mono" style="color:var(--red)">${fmt(d.stopLoss)}</div></div>
+      <div class="sb"><div class="sl">현재환율 (USD/KRW)</div><div class="sv mono" style="color:var(--amber)">${ff(d.fxRate)}</div></div>
+    </div>`;
+
+  // Active positions
+  h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>보유 포지션 (${activePos.length}건)
+    <span style="margin-left:auto;font-size:11px;color:var(--t3)">미실현 P&L: <span class="mono ${totalPnl>=0?'up':'dn'}">${totalPnl>=0?'+':''}${ff(totalPnl)}원</span></span></div>
+    <div class="tbl-scroll"><table style="min-width:700px"><thead><tr>
+      <th>#</th><th>종목</th><th>유형</th><th>진입일</th><th>계약수</th><th>진입가</th><th>현재가</th><th>미실현 P&L</th>
+    </tr></thead><tbody>`;
+  activePos.forEach((p,i)=>{
+    const dir=p.contracts>0?'Long':'Short';
+    const dirCls=p.contracts>0?'up':'dn';
+    h+=`<tr>
+      <td>${i+1}</td><td>${p.name}</td>
+      <td><span class="tg ${p.contracts>0?'ti':'to'}">${dir}</span></td>
+      <td class="am">${p.date}</td>
+      <td class="am" style="font-weight:600">${Math.abs(p.contracts)}</td>
+      <td class="am">${ff(p.entry)}</td>
+      <td class="am">${ff(p.mkt)}</td>
+      <td class="am ${p.pnl>=0?'up':'dn'}" style="font-weight:600">${p.pnl>=0?'+':''}${ff(p.pnl)}</td>
+    </tr>`;
+  });
+  h+=`</tbody></table></div></div>`;
+
+  // Watchlist (contracts=0)
+  if(watchPos.length){
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--t3)"></div>관심종목 (미보유)</div>
+      <div class="tbl-scroll"><table style="min-width:500px"><thead><tr>
+        <th>#</th><th>종목</th><th>유형</th><th>현재가</th><th>기준가</th>
+      </tr></thead><tbody>`;
+    watchPos.forEach((p,i)=>{
+      h+=`<tr><td>${i+1}</td><td>${p.name}</td><td class="am">${p.cat}</td><td class="am">${ff(p.mkt)}</td><td class="am" style="color:var(--t3)">${ff(p.entry)}</td></tr>`;
+    });
+    h+=`</tbody></table></div></div>`;
+  }
+
+  // Asset class breakdown
+  h+=`<div class="cg">
+    <div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>자산군별 손익 (2026)</div>
+      <div class="tbl-scroll"><table style="min-width:300px"><thead><tr><th>자산군</th><th style="text-align:right">P&L (2026)</th><th style="text-align:right">ITD</th></tr></thead><tbody>`;
+  d.byClass.forEach(cl=>{
+    h+=`<tr><td style="text-align:left;font-weight:500">${cl.name}</td>
+      <td class="am ${cl.pnl2026>=0?'up':'dn'}">${cl.pnl2026>=0?'+':''}${ff(cl.pnl2026)}</td>
+      <td class="am ${cl.itd>=0?'up':'dn'}">${cl.itd>=0?'+':''}${ff(cl.itd)}</td></tr>`;
+  });
+  const totalCls=d.byClass.reduce((s,c)=>s+c.pnl2026,0);
+  h+=`<tr class="fr"><td style="text-align:left">Total</td>
+    <td class="am ${totalCls>=0?'up':'dn'}">${totalCls>=0?'+':''}${ff(totalCls)}</td>
+    <td class="am ${totalCls>=0?'up':'dn'}">${totalCls>=0?'+':''}${ff(totalCls)}</td></tr>`;
+  h+=`</tbody></table></div></div>`;
+
+  // Monthly PnL
+  h+=`<div class="cc"><div class="ct"><div class="cd" style="background:var(--amber)"></div>월별 손익</div>
+    <canvas id="futMonthlyChart" height="200"></canvas></div></div>`;
+
+  document.getElementById('paneActive').innerHTML=h;
+  setTimeout(drawFutMonthly,50);
+}
+
+function drawFutMonthly(){
+  const cv=document.getElementById('futMonthlyChart');if(!cv)return;
+  const d=FUTURES_DATA.monthly;
+  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.getBoundingClientRect();
+  cv.width=rect.width*dpr;cv.height=200*dpr;ctx.scale(dpr,dpr);
+  const W=rect.width,H=200;
+  const vs=d.map(m=>m.pnl),labels=d.map(m=>m.month+'월');
+  const mx=Math.max(...vs.map(Math.abs),1);
+  const pad={t:20,b:30,l:10,r:10},bA=W-pad.l-pad.r;
+  const bW=Math.min(bA/vs.length*.5,50),gap=(bA-bW*vs.length)/(vs.length+1);
+  const cH=H-pad.t-pad.b,zY=pad.t+cH/2;
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.l,zY);ctx.lineTo(W-pad.r,zY);ctx.stroke();
+  vs.forEach((v,i)=>{
+    const x=pad.l+gap*(i+1)+bW*i,h2=Math.abs(v)/mx*(cH/2-8),y=v>=0?zY-h2:zY;
+    const co=v>=0?'#2ee8a5':'#ff5c72';
+    ctx.fillStyle=co;rr(ctx,x,y,bW,h2,3);ctx.fill();
+    ctx.fillStyle=co;ctx.font='500 10px DM Mono';ctx.textAlign='center';
+    ctx.fillText((v>=0?'+':'')+fmt(v),x+bW/2,v>=0?y-5:y+h2+12);
+    ctx.fillStyle='#8fa3c0';ctx.font='11px Noto Sans KR';ctx.textAlign='center';
+    ctx.fillText(labels[i],x+bW/2,H-pad.b+14);
+  });
 }
 
 // =========== 현금 입출금 ===========
