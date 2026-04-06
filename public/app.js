@@ -140,11 +140,11 @@ function renderSum(){
   const dailyP=getDailyProfit();
   const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;
   document.getElementById('sumGrid').innerHTML=`
-    <div class="sum-card sc1"><div class="sl">총 투자금액</div><div class="sv mono">${fmt(ti)}</div><div class="ss" style="color:var(--t3)">${ff(ti)}원</div></div>
-    <div class="sum-card sc2"><div class="sl">현재 평가금액</div><div class="sv mono">${fmt(tb)}</div><div class="ss ${pnl>=0?'up':'dn'}">${pnl>=0?'▲':'▼'} ${fmt(Math.abs(pnl))} (${pp.toFixed(2)}%)</div></div>
-    <div class="sum-card sc3"><div class="sl">금일 투자수익</div><div class="sv mono ${dailyP>=0?'up':'dn'}">${dailyP>=0?'+':''}${fmt(dailyP)}</div><div class="ss" style="color:var(--t3)">전일 대비 (꿈비 제외)</div></div>
-    <div class="sum-card sc4"><div class="sl">누적 투자수익</div><div class="sv mono up">+${fmt(CUM_PROFIT)}</div><div class="ss" style="color:var(--t3)">${cumPp.toFixed(2)}% (기초 대비)</div></div>
-    <div class="sum-card sc5"><div class="sl">현금 잔액</div><div class="sv mono" style="color:var(--cyan)">${fmt(cashBal)}</div><div class="ss" style="color:var(--t3)">입출금 ${getCash().length}건</div></div>`;
+    <div class="sum-card sc1"><div class="sl">총 투자금액</div><div class="sv mono">${ff(ti)}</div><div class="ss" style="color:var(--t3)">${ff(ti)}원</div></div>
+    <div class="sum-card sc2"><div class="sl">현재 평가금액</div><div class="sv mono">${ff(tb)}</div><div class="ss ${pnl>=0?'up':'dn'}">${pnl>=0?'▲':'▼'} ${ff(Math.abs(pnl))} (${pp.toFixed(2)}%)</div></div>
+    <div class="sum-card sc3"><div class="sl">금일 투자수익</div><div class="sv mono ${dailyP>=0?'up':'dn'}">${dailyP>=0?'+':''}${ff(dailyP)}</div><div class="ss" style="color:var(--t3)">전일 대비 (꿈비 제외)</div></div>
+    <div class="sum-card sc4"><div class="sl">누적 투자수익</div><div class="sv mono up">+${ff(CUM_PROFIT)}</div><div class="ss" style="color:var(--t3)">${cumPp.toFixed(2)}% (기초 대비)</div></div>
+    <div class="sum-card sc5"><div class="sl">현금 잔액</div><div class="sv mono" style="color:var(--cyan)">${ff(cashBal)}</div><div class="ss" style="color:var(--t3)">입출금 ${getCash().length}건</div></div>`;
 }
 
 // =========== RENDER ===========
