@@ -674,6 +674,11 @@ function saveItemBal(catId,itemId){
   if(isNaN(num)){alert('올바른 금액을 입력하세요.');return}
   const cats=getCats();const cat=cats.find(c=>c.id===catId);
   if(!cat)return;
+  if(num===0){
+    if(!confirm("잔액이 0입니다. 이 상품을 삭제하시겠습니까?"))return;
+    cat.items=cat.items.filter(i=>i.id!==itemId);
+    saveCats(cats);render();return;
+  }
   const item=cat.items.find(i=>i.id===itemId);
   if(item){item.bal=num;saveCats(cats);render()}
 }
