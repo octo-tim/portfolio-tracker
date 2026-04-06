@@ -829,17 +829,9 @@ function delItem(catId,itemId){if(!confirm('이 상품을 삭제하시겠습니�
 
 // =========== INIT ===========
 // Load data from server, then render
-(async function boot(){
-  try{
-    const resp=await fetch('/api/data');
-    if(resp.ok){
-      const data=await resp.json();
-      Object.entries(data).forEach(([k,v])=>{
-        _cache[k]=v;
-        localStorage.setItem(k,JSON.stringify(v));
-      });
-    }
-  }catch(e){console.log('Server load failed, using localStorage:',e.message)}
+fetch('/api/data').then(function(r){return r.json()}).then(function(data){
+  Object.entries(data).forEach(function(e){_cache[e[0]]=e[1];try{localStorage.setItem(e[0],JSON.stringify(e[1]))}catch(x){}});
+}).catch(function(e){console.log('Server load failed:',e.message)}).finally(function(){
   renderTabs();render();
-})();
+});
 window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50)});
