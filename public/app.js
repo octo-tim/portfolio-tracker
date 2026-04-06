@@ -590,23 +590,70 @@ function expCash(){const r=getCash();if(!r.length){alert('데이터가 없습니
 // =========== 누적 수익 현황 ===========
 function rCumul(){
   const c=live(),all=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all.push(it)}));
-  const ti=all.reduce((s,i)=>s+i.init,0);const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;const recs=getDaily();
+  const ti=all.reduce((s,i)=>s+i.init,0),tb=all.reduce((s,i)=>s+i.bal,0);
+  const gg=all.find(x=>x.name==='꿈비');const ggPnl=gg?(gg.bal-gg.init):0;
+  const finPnl=tb-ti-ggPnl;
+  const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;
+  const recs=getDaily();
+  const hist=getBalHist();
+
   let h=`<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>포트폴리오 손익 요약</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익</div><div class="mono up" style="font-size:20px">+${ff(CUM_PROFIT)}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">수익률</div><div class="mono up" style="font-size:20px">+${cumPp.toFixed(2)}%</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div></div>`;
-  if(recs.length>=2){h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
-    h+=`<div class="cc full" style="margin-top:16px"><div class="ct"><div class="cd" style="background:var(--amber)"></div>상품별 일별 수익 추이</div><div id="pdC"></div></div>`}
-  else{h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>'}
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익 (고정)</div><div class="mono up" style="font-size:20px">+${ff(CUM_PROFIT)}</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">현재 금융투자 손익 (꿈비 제외)</div><div class="mono ${finPnl>=0?'up':'dn'}" style="font-size:20px">${finPnl>=0?'+':''}${ff(finPnl)}</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div>
+    <div class="nb" style="margin-top:12px">※ 누적 투자수익(${ff(CUM_PROFIT)}원)은 기초 설정 고정값입니다. 금융투자자산 탭에서 일별 잔액을 입력하면 <b>현재 금융투자 손익</b>에 실시간 반영됩니다.</div>
+  </div>`;
+
+  // ===== 일별 수익 테이블 (최근 30일) =====
+  const {dates:pDates, daily:pDaily} = getDailyPnLSeries();
+  if(pDates.length>=2){
+    const last30d=pDates.slice(-30);
+    const last30v=pDaily.slice(-30);
+    let cumPnl=0;
+    // Calculate running cumulative from the first available date
+    for(let i=0;i<pDaily.length-30;i++) cumPnl+=pDaily[i];
+
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--blue)"></div>일별 투자수익 (최근 ${Math.min(last30d.length,30)}일)</div>
+      <div class="tbl-scroll"><table style="min-width:400px"><thead><tr><th>날짜</th><th style="text-align:right">일별 손익</th><th style="text-align:right">누적 손익</th></tr></thead><tbody>`;
+    // Show in reverse chronological order
+    const rows=[];
+    for(let i=0;i<last30d.length;i++){
+      cumPnl+=last30v[i];
+      rows.push({date:last30d[i],daily:last30v[i],cum:cumPnl});
+    }
+    rows.reverse().forEach(r=>{
+      h+=`<tr><td style="text-align:left" class="am">${r.date}</td>
+        <td class="am ${r.daily>=0?'up':'dn'}">${r.daily>=0?'+':''}${ff(r.daily)}</td>
+        <td class="am ${r.cum>=0?'up':'dn'}">${r.cum>=0?'+':''}${ff(r.cum)}</td></tr>`;
+    });
+    h+=`</tbody></table></div></div>`;
+  }else{
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--blue)"></div>일별 투자수익</div>
+      <div class="em">금융투자자산 탭에서 2일 이상 잔액을 기록하면 일별 수익이 표시됩니다.</div></div>`;
+  }
+
+  // Charts
+  if(recs.length>=2){
+    h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
+    h+=`<div class="cc full" style="margin-top:16px"><div class="ct"><div class="cd" style="background:var(--amber)"></div>상품별 일별 수익 추이</div><div id="pdC"></div></div>`;
+  }else{
+    h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>';
+  }
+
+  // Ranking
   const rk=all.filter(x=>x.init>0).map(x=>({...x,pn:x.bal-x.init,p2:pct(x.bal,x.init)})).sort((a,b)=>b.pn-a.pn);
   h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--purple)"></div>상품별 수익 랭킹</div><div class="tbl-scroll"><table><thead><tr><th>순위</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
   rk.forEach((r,i)=>{h+=`<tr><td>${i+1}</td><td>${r.name}</td><td class="am">${ff(r.init)}</td><td class="am">${ff(r.bal)}</td><td class="am ${r.pn>=0?'up':'dn'}">${r.pn>=0?'+':''}${ff(r.pn)}</td><td class="am ${r.p2>=0?'up':'dn'}">${r.p2>=0?'+':''}${r.p2.toFixed(2)}%</td></tr>`});
   h+='</tbody></table></div>';
+
+  // Daily records log
   if(recs.length){const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date));
     h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--cyan)"></div>일별 기록 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${recs.length}건</span></div><div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>상품</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>`;
     sorted.slice(0,100).forEach(r=>{h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${r.product}</td><td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delDR('${r.id}')">삭제</button></td></tr>`});
-    h+='</tbody></table></div>'}
+    h+='</tbody></table></div>';
+  }
+
   document.getElementById('paneActive').innerHTML=h;
   if(recs.length>=2)setTimeout(()=>{drawCum(recs);drawPD(recs)},60);
 }
