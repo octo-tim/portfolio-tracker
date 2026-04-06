@@ -203,18 +203,7 @@ function rFin(){
     <div class="cc"><div class="ct"><div class="cd" style="background:var(--green)"></div>월별 손익 변화</div><canvas id="monthlyPnlChart" height="240"></canvas></div>
   </div>`;
 
-  // History log
-  const sortedHist=[...hist].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-  if(sortedHist.length){
-    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--purple)"></div>잔액 기록 이력 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${sortedHist.length}건</span></div>
-      <div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>상품명</th><th>잔액</th><th>메모</th><th></th></tr></thead><tbody>`;
-    sortedHist.slice(0,50).forEach(r=>{
-      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${findItemName(r.itemId)}</td>
-        <td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td>
-        <td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delBalHist('${r.id}')">삭제</button></td></tr>`;
-    });
-    h+='</tbody></table></div>';
-  }
+
 
   document.getElementById('paneActive').innerHTML=h;
   setTimeout(()=>{renderPnlTable();drawDailyPnlChart();drawMonthlyPnlChart()},50);
@@ -657,12 +646,7 @@ function rCumul(){
   rk.forEach((r,i)=>{h+=`<tr><td>${i+1}</td><td>${r.name}</td><td class="am">${ff(r.init)}</td><td class="am">${ff(r.bal)}</td><td class="am ${r.pn>=0?'up':'dn'}">${r.pn>=0?'+':''}${ff(r.pn)}</td><td class="am ${r.p2>=0?'up':'dn'}">${r.p2>=0?'+':''}${r.p2.toFixed(2)}%</td></tr>`});
   h+='</tbody></table></div>';
 
-  // Daily records log
-  if(recs.length){const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date));
-    h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--cyan)"></div>일별 기록 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${recs.length}건</span></div><div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>상품</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>`;
-    sorted.slice(0,100).forEach(r=>{h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${r.product}</td><td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delDR('${r.id}')">삭제</button></td></tr>`});
-    h+='</tbody></table></div>';
-  }
+
 
   document.getElementById('paneActive').innerHTML=h;
   if(recs.length>=2)setTimeout(()=>{drawCum(recs);drawPD(recs)},60);
