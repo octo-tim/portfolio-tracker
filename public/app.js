@@ -135,10 +135,11 @@ function renderSum(){
   const ti=all.reduce((s,i)=>s+i.init,0),tb=all.reduce((s,i)=>s+i.bal,0);
   const gg=all.find(x=>x.name==='꿈비');const ggPnl=gg?(gg.bal-gg.init):0;
   const pnl=tb-ti-ggPnl,pp=ti?pct(ti+pnl,ti):0;
+  const finCat2=c[0];const finItems2=finCat2?finCat2.items.filter(x=>x.init||x.bal):[];const finI2=finItems2.reduce((s,i)=>s+i.init,0),finB2=finItems2.reduce((s,i)=>s+i.bal,0);const finPnlExGg=finB2-finI2-ggPnl;const totalCum=CUM_PROFIT+finPnlExGg;
   const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashArr.push(it)}));
   const cashBal=cashArr.length?cashArr[0].bal:0;
   const dailyP=getDailyProfit();
-  const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;
+  const cumPp=ti?pct(ti+totalCum,ti):0;
   document.getElementById('sumGrid').innerHTML=`
     <div class="sum-card sc1"><div class="sl">총 투자금액</div><div class="sv mono">${ff(ti)}</div><div class="ss" style="color:var(--t3)">${ff(ti)}원</div></div>
     <div class="sum-card sc2"><div class="sl">현재 평가금액</div><div class="sv mono">${ff(tb)}</div><div class="ss ${pnl>=0?'up':'dn'}">${pnl>=0?'▲':'▼'} ${ff(Math.abs(pnl))} (${pp.toFixed(2)}%)</div></div>
@@ -599,10 +600,10 @@ function rCumul(){
 
   let h=`<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>포트폴리오 손익 요약</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익 (고정)</div><div class="mono up" style="font-size:20px">+${ff(CUM_PROFIT)}</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익</div><div class="mono ${(CUM_PROFIT+finPnl)>=0?'up':'dn'}" style="font-size:20px">${(CUM_PROFIT+finPnl)>=0?'+':''}${ff(CUM_PROFIT+finPnl)}</div></div>
       <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">현재 금융투자 손익 (꿈비 제외)</div><div class="mono ${finPnl>=0?'up':'dn'}" style="font-size:20px">${finPnl>=0?'+':''}${ff(finPnl)}</div></div>
       <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div>
-    <div class="nb" style="margin-top:12px">※ 누적 투자수익(${ff(CUM_PROFIT)}원)은 기초 설정 고정값입니다. 금융투자자산 탭에서 일별 잔액을 입력하면 <b>현재 금융투자 손익</b>에 실시간 반영됩니다.</div>
+    <div class="nb" style="margin-top:12px">※ 누적 투자수익 = 기초 고정값(${ff(CUM_PROFIT)}원) + 금일 금융투자 손익(${finPnl>=0?'+':''}${ff(finPnl)}원). 금융투자자산 탭에서 잔액을 입력하면 실시간 반영됩니다.</div>
   </div>`;
 
   // ===== 일별 수익 테이블 (최근 30일) =====
