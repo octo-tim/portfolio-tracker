@@ -761,8 +761,50 @@ function saveAddItem(){
 }
 function donut(data){const total=data.reduce((s,d)=>s+d.val,0);if(!total)return'<div class="em">데이터 없음</div>';const R=72,CX=90,CY=90,SW=18,ci=2*Math.PI*R;let cu=0,p='';data.forEach(d=>{const f=d.val/total,da=ci*f,ga=ci-da,o=-ci*cu+ci*.25;p+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${d.color}" stroke-width="${SW}" stroke-dasharray="${da} ${ga}" stroke-dashoffset="${o}" opacity=".85"/>`;cu+=f});const lg2=data.map(d=>`<div class="li"><div class="ld" style="background:${d.color}"></div><span class="ln">${d.name}</span><span class="lp">${(d.val/total*100).toFixed(1)}%</span></div>`).join('');return`<div class="dw"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="${SW}"/>${p}<text x="${CX}" y="${CY-6}" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Outfit">합계</text><text x="${CX}" y="${CY+12}" text-anchor="middle" fill="var(--t1)" font-size="13" font-weight="600" font-family="DM Mono">${fmt(total)}</text></svg><div class="lg">${lg2}</div></div>`}
 
+// =========== DATA EXPORT/IMPORT (기기간 동기화) ===========
+function exportAllData(){
+  const data={
+    cats:localStorage.getItem('pt_cats_v3'),
+    cash:localStorage.getItem('pt_cash_v3'),
+    daily:localStorage.getItem('pt_daily_v3'),
+    balHist:localStorage.getItem('pt_balhist_v3'),
+    futures:localStorage.getItem('pt_futures_v1'),
+    exportDate:new Date().toISOString()
+  };
+  const json=JSON.stringify(data,null,2);
+  const blob=new Blob([json],{type:'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='portfolio_backup_'+today()+'.json';
+  a.click();
+}
+function importAllData(){
+  const inp=document.createElement('input');
+  inp.type='file';inp.accept='.json';
+  inp.onchange=function(e){
+    const file=e.target.files[0];if(!file)return;
+    const reader=new FileReader();
+    reader.onload=function(ev){
+      try{
+        const data=JSON.parse(ev.target.result);
+        if(!data.cats&&!data.balHist){alert('올바른 백업 파일이 아닙니다.');return}
+        if(!confirm('현재 데이터를 백업 파일로 덮어쓰시겠습니까?\n(내보낸 날짜: '+(data.exportDate||'알 수 없음')+')'))return;
+        if(data.cats)localStorage.setItem('pt_cats_v3',data.cats);
+        if(data.cash)localStorage.setItem('pt_cash_v3',data.cash);
+        if(data.daily)localStorage.setItem('pt_daily_v3',data.daily);
+        if(data.balHist)localStorage.setItem('pt_balhist_v3',data.balHist);
+        if(data.futures)localStorage.setItem('pt_futures_v1',data.futures);
+        alert('데이터를 복원했습니다. 페이지를 새로고침합니다.');
+        location.reload();
+      }catch(err){alert('파일 읽기 오류: '+err.message)}
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
 // =========== ASSET MANAGER ===========
-function openMgr(){const cats=getCats();let h=`<div class="modal-bg" onclick="if(event.target===this)closeMgr()"><div class="modal"><h3>⚙ 자산 관리<button class="modal-close" onclick="closeMgr()">✕</button></h3><div class="nb">카테고리 및 자산 항목을 추가/삭제할 수 있습니다.</div>`;cats.forEach(cat=>{h+=`<div style="margin-bottom:20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div class="cd" style="background:${cat.color}"></div><span style="font-weight:700;font-size:14px">${cat.name}</span><button class="btn bd" style="padding:3px 10px;font-size:10px;margin-left:auto" onclick="delCat('${cat.id}')">카테고리 삭제</button></div><div class="mgr">`;cat.items.forEach(it=>{if(it.name==='현금')return;h+=`<div class="mgr-item"><span>${it.name}</span><span class="am" style="color:var(--t3)">기초: ${ff(it.init)}</span><button class="btn bd" style="padding:2px 8px;font-size:10px" onclick="delItem('${cat.id}','${it.id}')">삭제</button></div>`});h+=`</div><div class="mgr-add"><input type="text" id="newItem_${cat.id}" placeholder="새 상품명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><input type="number" id="newItemInit_${cat.id}" placeholder="기초금액" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;width:120px;font-family:'DM Mono',monospace"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addItem('${cat.id}')">+ 추가</button></div></div>`});h+=`<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">새 카테고리 추가</div><div class="mgr-add"><input type="text" id="newCatName" placeholder="카테고리명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addCat()">+ 추가</button></div></div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn bd" onclick="if(confirm('모든 데이터를 초기화하시겠습니까?')){Object.values(SK).forEach(k=>localStorage.removeItem(k));closeMgr();render()}">전체 초기화</button><button class="btn bp" onclick="closeMgr()">닫기</button></div></div></div>`;document.getElementById('modalRoot').innerHTML=h}
+function openMgr(){const cats=getCats();let h=`<div class="modal-bg" onclick="if(event.target===this)closeMgr()"><div class="modal"><h3>⚙ 자산 관리<button class="modal-close" onclick="closeMgr()">✕</button></h3><div class="nb">카테고리 및 자산 항목을 추가/삭제할 수 있습니다.</div>`;cats.forEach(cat=>{h+=`<div style="margin-bottom:20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div class="cd" style="background:${cat.color}"></div><span style="font-weight:700;font-size:14px">${cat.name}</span><button class="btn bd" style="padding:3px 10px;font-size:10px;margin-left:auto" onclick="delCat('${cat.id}')">카테고리 삭제</button></div><div class="mgr">`;cat.items.forEach(it=>{if(it.name==='현금')return;h+=`<div class="mgr-item"><span>${it.name}</span><span class="am" style="color:var(--t3)">기초: ${ff(it.init)}</span><button class="btn bd" style="padding:2px 8px;font-size:10px" onclick="delItem('${cat.id}','${it.id}')">삭제</button></div>`});h+=`</div><div class="mgr-add"><input type="text" id="newItem_${cat.id}" placeholder="새 상품명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><input type="number" id="newItemInit_${cat.id}" placeholder="기초금액" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;width:120px;font-family:'DM Mono',monospace"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addItem('${cat.id}')">+ 추가</button></div></div>`});h+=`<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">새 카테고리 추가</div><div class="mgr-add"><input type="text" id="newCatName" placeholder="카테고리명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addCat()">+ 추가</button></div></div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn bo2" onclick="exportAllData()">📥 백업 내보내기</button><button class="btn bo2" onclick="closeMgr();importAllData()">📤 백업 가져오기</button><button class="btn bd" onclick="if(confirm('모든 데이터를 초기화하시겠습니까?')){Object.values(SK).forEach(k=>localStorage.removeItem(k));closeMgr();render()}">전체 초기화</button><button class="btn bp" onclick="closeMgr()">닫기</button></div></div></div>`;document.getElementById('modalRoot').innerHTML=h}
 function closeMgr(){document.getElementById('modalRoot').innerHTML='';render()}
 function addCat(){const name=document.getElementById('newCatName').value.trim();if(!name){alert('카테고리명을 입력하세요.');return}const cats=getCats();cats.push({id:uid(),name,color:CAT_COLORS[cats.length%CAT_COLORS.length],items:[]});saveCats(cats);openMgr()}
 function delCat(catId){if(!confirm('이 카테고리를 삭제하시겠습니까?'))return;saveCats(getCats().filter(c=>c.id!==catId));openMgr()}
