@@ -1,7 +1,16 @@
-// =========== STORAGE ===========
+// =========== STORAGE (Server DB + localStorage cache) ===========
 const SK={cats:'pt_cats_v3',cash:'pt_cash_v3',daily:'pt_daily_v3',balHist:'pt_balhist_v3'};
-const lsG=k=>{try{return JSON.parse(localStorage.getItem(k))}catch{return null}};
-const lsS=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const _cache={};
+const lsG=k=>{
+  if(_cache[k]!==undefined)return _cache[k];
+  try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}
+};
+const lsS=(k,v)=>{
+  _cache[k]=v;
+  localStorage.setItem(k,JSON.stringify(v));
+  // Async save to server
+  fetch('/api/data/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:v})}).catch(()=>{});
+};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today=()=>new Date().toISOString().slice(0,10);
 const PAL=['#4d8eff','#2ee8a5','#ffb84d','#ff5c72','#a78bfa','#fb923c','#22d3ee','#f472b6','#818cf8','#38bdf8','#4ade80','#e879f9'];
@@ -372,7 +381,7 @@ const DEFAULT_FUT={
   monthly:[{month:1,pnl:17207535},{month:2,pnl:-8113343},{month:3,pnl:-28059133}]
 };
 
-function getFut(){return lsG(SK_FUT)||JSON.parse(JSON.stringify(DEFAULT_FUT))}
+function getFut(){return _cache[SK_FUT]||lsG(SK_FUT)||JSON.parse(JSON.stringify(DEFAULT_FUT))}
 function saveFut(d){lsS(SK_FUT,d)}
 
 function calcPnl(p,fxRate){
@@ -795,7 +804,14 @@ function importAllData(){
         if(data.balHist)localStorage.setItem('pt_balhist_v3',data.balHist);
         if(data.futures)localStorage.setItem('pt_futures_v1',data.futures);
         alert('데이터를 복원했습니다. 페이지를 새로고침합니다.');
-        location.reload();
+        // Sync imported data to server
+        fetch('/api/data/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+          pt_cats_v3:JSON.parse(data.cats||'null'),
+          pt_cash_v3:JSON.parse(data.cash||'null'),
+          pt_daily_v3:JSON.parse(data.daily||'null'),
+          pt_balhist_v3:JSON.parse(data.balHist||'null'),
+          pt_futures_v1:JSON.parse(data.futures||'null')
+        })}).finally(()=>location.reload());
       }catch(err){alert('파일 읽기 오류: '+err.message)}
     };
     reader.readAsText(file);
@@ -812,5 +828,18 @@ function addItem(catId){const name=document.getElementById('newItem_'+catId).val
 function delItem(catId,itemId){if(!confirm('이 상품을 삭제하시겠습니까?'))return;const cats=getCats();const cat=cats.find(c=>c.id===catId);if(!cat)return;cat.items=cat.items.filter(i=>i.id!==itemId);saveCats(cats);openMgr()}
 
 // =========== INIT ===========
-renderTabs();render();
+// Load data from server, then render
+(async function boot(){
+  try{
+    const resp=await fetch('/api/data');
+    if(resp.ok){
+      const data=await resp.json();
+      Object.entries(data).forEach(([k,v])=>{
+        _cache[k]=v;
+        localStorage.setItem(k,JSON.stringify(v));
+      });
+    }
+  }catch(e){console.log('Server load failed, using localStorage:',e.message)}
+  renderTabs();render();
+})();
 window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50)});

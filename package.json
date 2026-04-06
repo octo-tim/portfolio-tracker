@@ -1,13 +1,14 @@
 {
   "name": "portfolio-tracker",
-  "version": "1.0.0",
-  "description": "개인 투자 포트폴리오 트래커",
+  "version": "1.1.0",
+  "description": "개인 투자 포트폴리오 트래커 (서버 DB 저장)",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "express": "^4.21.0"
+    "express": "^4.21.0",
+    "better-sqlite3": "^11.7.0"
   },
   "engines": {
     "node": ">=18"
