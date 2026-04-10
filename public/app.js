@@ -1,16 +1,7 @@
-// =========== STORAGE (Server DB + localStorage cache) ===========
+// =========== STORAGE ===========
 const SK={cats:'pt_cats_v3',cash:'pt_cash_v3',daily:'pt_daily_v3',balHist:'pt_balhist_v3'};
-const _cache={};
-const lsG=k=>{
-  if(_cache[k]!==undefined)return _cache[k];
-  try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}
-};
-const lsS=(k,v)=>{
-  _cache[k]=v;
-  localStorage.setItem(k,JSON.stringify(v));
-  // Async save to server
-  fetch('/api/data/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:v})}).catch(()=>{});
-};
+const lsG=k=>{try{return JSON.parse(localStorage.getItem(k))}catch{return null}};
+const lsS=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today=()=>new Date().toISOString().slice(0,10);
 const PAL=['#4d8eff','#2ee8a5','#ffb84d','#ff5c72','#a78bfa','#fb923c','#22d3ee','#f472b6','#818cf8','#38bdf8','#4ade80','#e879f9'];
@@ -144,17 +135,16 @@ function renderSum(){
   const ti=all.reduce((s,i)=>s+i.init,0),tb=all.reduce((s,i)=>s+i.bal,0);
   const gg=all.find(x=>x.name==='꿈비');const ggPnl=gg?(gg.bal-gg.init):0;
   const pnl=tb-ti-ggPnl,pp=ti?pct(ti+pnl,ti):0;
-  const finCat2=c[0];const finItems2=finCat2?finCat2.items.filter(x=>x.init||x.bal):[];const finI2=finItems2.reduce((s,i)=>s+i.init,0),finB2=finItems2.reduce((s,i)=>s+i.bal,0);const finPnlExGg=finB2-finI2-ggPnl;const totalCum=CUM_PROFIT+finPnlExGg;
   const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashArr.push(it)}));
   const cashBal=cashArr.length?cashArr[0].bal:0;
   const dailyP=getDailyProfit();
-  const cumPp=ti?pct(ti+totalCum,ti):0;
+  const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;
   document.getElementById('sumGrid').innerHTML=`
-    <div class="sum-card sc1"><div class="sl">총 투자금액</div><div class="sv mono">${ff(ti)}</div><div class="ss" style="color:var(--t3)">${ff(ti)}원</div></div>
-    <div class="sum-card sc2"><div class="sl">현재 평가금액</div><div class="sv mono">${ff(tb)}</div><div class="ss ${pnl>=0?'up':'dn'}">${pnl>=0?'▲':'▼'} ${ff(Math.abs(pnl))} (${pp.toFixed(2)}%)</div></div>
-    <div class="sum-card sc3"><div class="sl">금일 투자수익</div><div class="sv mono ${dailyP>=0?'up':'dn'}">${dailyP>=0?'+':''}${ff(dailyP)}</div><div class="ss" style="color:var(--t3)">전일 대비 (꿈비 제외)</div></div>
-    <div class="sum-card sc4"><div class="sl">누적 투자수익</div><div class="sv mono up">${totalCum>=0?"+":""}${ff(totalCum)}</div><div class="ss" style="color:var(--t3)">${cumPp.toFixed(2)}% (기초 대비)</div></div>
-    <div class="sum-card sc5"><div class="sl">현금 잔액</div><div class="sv mono" style="color:var(--cyan)">${ff(cashBal)}</div><div class="ss" style="color:var(--t3)">입출금 ${getCash().length}건</div></div>`;
+    <div class="sum-card sc1"><div class="sl">총 투자금액</div><div class="sv mono">${fmt(ti)}</div><div class="ss" style="color:var(--t3)">${ff(ti)}원</div></div>
+    <div class="sum-card sc2"><div class="sl">현재 평가금액</div><div class="sv mono">${fmt(tb)}</div><div class="ss ${pnl>=0?'up':'dn'}">${pnl>=0?'▲':'▼'} ${fmt(Math.abs(pnl))} (${pp.toFixed(2)}%)</div></div>
+    <div class="sum-card sc3"><div class="sl">금일 투자수익</div><div class="sv mono ${dailyP>=0?'up':'dn'}">${dailyP>=0?'+':''}${fmt(dailyP)}</div><div class="ss" style="color:var(--t3)">전일 대비 (꿈비 제외)</div></div>
+    <div class="sum-card sc4"><div class="sl">누적 투자수익</div><div class="sv mono up">+${fmt(CUM_PROFIT)}</div><div class="ss" style="color:var(--t3)">${cumPp.toFixed(2)}% (기초 대비)</div></div>
+    <div class="sum-card sc5"><div class="sl">현금 잔액</div><div class="sv mono" style="color:var(--cyan)">${fmt(cashBal)}</div><div class="ss" style="color:var(--t3)">입출금 ${getCash().length}건</div></div>`;
 }
 
 // =========== RENDER ===========
@@ -203,7 +193,18 @@ function rFin(){
     <div class="cc"><div class="ct"><div class="cd" style="background:var(--green)"></div>월별 손익 변화</div><canvas id="monthlyPnlChart" height="240"></canvas></div>
   </div>`;
 
-
+  // History log
+  const sortedHist=[...hist].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
+  if(sortedHist.length){
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--purple)"></div>잔액 기록 이력 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${sortedHist.length}건</span></div>
+      <div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>상품명</th><th>잔액</th><th>메모</th><th></th></tr></thead><tbody>`;
+    sortedHist.slice(0,50).forEach(r=>{
+      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${findItemName(r.itemId)}</td>
+        <td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td>
+        <td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delBalHist('${r.id}')">삭제</button></td></tr>`;
+    });
+    h+='</tbody></table></div>';
+  }
 
   document.getElementById('paneActive').innerHTML=h;
   setTimeout(()=>{renderPnlTable();drawDailyPnlChart();drawMonthlyPnlChart()},50);
@@ -286,7 +287,7 @@ function loadPrevDay(){
     const inp=document.getElementById('batch_'+it.id);if(!inp)return;
     const rec=latestByItem[it.id];
     if(rec){
-      inp.value=it.bal.toLocaleString();usedDates.add(rec.date);
+      inp.value=rec.bal.toLocaleString();usedDates.add(rec.date);
     }else{
       inp.value=it.bal.toLocaleString();usedDates.add('기초값');
     }
@@ -370,7 +371,7 @@ const DEFAULT_FUT={
   monthly:[{month:1,pnl:17207535},{month:2,pnl:-8113343},{month:3,pnl:-28059133}]
 };
 
-function getFut(){return _cache[SK_FUT]||lsG(SK_FUT)||JSON.parse(JSON.stringify(DEFAULT_FUT))}
+function getFut(){return lsG(SK_FUT)||JSON.parse(JSON.stringify(DEFAULT_FUT))}
 function saveFut(d){lsS(SK_FUT,d)}
 
 function calcPnl(p,fxRate){
@@ -589,65 +590,23 @@ function expCash(){const r=getCash();if(!r.length){alert('데이터가 없습니
 // =========== 누적 수익 현황 ===========
 function rCumul(){
   const c=live(),all=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all.push(it)}));
-  const ti=all.reduce((s,i)=>s+i.init,0),tb=all.reduce((s,i)=>s+i.bal,0);
-  const gg=all.find(x=>x.name==='꿈비');const ggPnl=gg?(gg.bal-gg.init):0;
-  const finPnl=tb-ti-ggPnl;
-  const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;
-  const recs=getDaily();
-  const hist=getBalHist();
-
+  const ti=all.reduce((s,i)=>s+i.init,0);const cumPp=ti?pct(ti+CUM_PROFIT,ti):0;const recs=getDaily();
   let h=`<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>포트폴리오 손익 요약</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익</div><div class="mono ${(CUM_PROFIT+finPnl)>=0?'up':'dn'}" style="font-size:20px">${(CUM_PROFIT+finPnl)>=0?'+':''}${ff(CUM_PROFIT+finPnl)}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">현재 금융투자 손익 (꿈비 제외)</div><div class="mono ${finPnl>=0?'up':'dn'}" style="font-size:20px">${finPnl>=0?'+':''}${ff(finPnl)}</div></div>
-      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div>
-    <div class="nb" style="margin-top:12px">※ 누적 투자수익 = 기초 고정값(${ff(CUM_PROFIT)}원) + 금일 금융투자 손익(${finPnl>=0?'+':''}${ff(finPnl)}원). 금융투자자산 탭에서 잔액을 입력하면 실시간 반영됩니다.</div>
-  </div>`;
-
-  // ===== 일별 수익 테이블 (최근 30일) =====
-  const {dates:pDates, daily:pDaily} = getDailyPnLSeries();
-  if(pDates.length>=2){
-    const last30d=pDates.slice(-30);
-    const last30v=pDaily.slice(-30);
-    let cumPnl=0;
-    // Calculate running cumulative from the first available date
-    for(let i=0;i<pDaily.length-30;i++) cumPnl+=pDaily[i];
-
-    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--blue)"></div>일별 투자수익 (최근 ${Math.min(last30d.length,30)}일)</div>
-      <div class="tbl-scroll"><table style="min-width:400px"><thead><tr><th>날짜</th><th style="text-align:right">일별 손익</th><th style="text-align:right">누적 손익</th></tr></thead><tbody>`;
-    // Show in reverse chronological order
-    const rows=[];
-    for(let i=0;i<last30d.length;i++){
-      cumPnl+=last30v[i];
-      rows.push({date:last30d[i],daily:last30v[i],cum:cumPnl});
-    }
-    rows.reverse().forEach(r=>{
-      h+=`<tr><td style="text-align:left" class="am">${r.date}</td>
-        <td class="am ${r.daily>=0?'up':'dn'}">${r.daily>=0?'+':''}${ff(r.daily)}</td>
-        <td class="am ${r.cum>=0?'up':'dn'}">${r.cum>=0?'+':''}${ff(r.cum)}</td></tr>`;
-    });
-    h+=`</tbody></table></div></div>`;
-  }else{
-    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--blue)"></div>일별 투자수익</div>
-      <div class="em">금융투자자산 탭에서 2일 이상 잔액을 기록하면 일별 수익이 표시됩니다.</div></div>`;
-  }
-
-  // Charts
-  if(recs.length>=2){
-    h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
-    h+=`<div class="cc full" style="margin-top:16px"><div class="ct"><div class="cd" style="background:var(--amber)"></div>상품별 일별 수익 추이</div><div id="pdC"></div></div>`;
-  }else{
-    h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>';
-  }
-
-  // Ranking
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">누적 투자수익</div><div class="mono up" style="font-size:20px">+${ff(CUM_PROFIT)}</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">수익률</div><div class="mono up" style="font-size:20px">+${cumPp.toFixed(2)}%</div></div>
+      <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div></div>`;
+  if(recs.length>=2){h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
+    h+=`<div class="cc full" style="margin-top:16px"><div class="ct"><div class="cd" style="background:var(--amber)"></div>상품별 일별 수익 추이</div><div id="pdC"></div></div>`}
+  else{h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>'}
   const rk=all.filter(x=>x.init>0).map(x=>({...x,pn:x.bal-x.init,p2:pct(x.bal,x.init)})).sort((a,b)=>b.pn-a.pn);
   h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--purple)"></div>상품별 수익 랭킹</div><div class="tbl-scroll"><table><thead><tr><th>순위</th><th>상품명</th><th>기초금액</th><th>현재잔액</th><th>손익</th><th>수익률</th></tr></thead><tbody>`;
   rk.forEach((r,i)=>{h+=`<tr><td>${i+1}</td><td>${r.name}</td><td class="am">${ff(r.init)}</td><td class="am">${ff(r.bal)}</td><td class="am ${r.pn>=0?'up':'dn'}">${r.pn>=0?'+':''}${ff(r.pn)}</td><td class="am ${r.p2>=0?'up':'dn'}">${r.p2>=0?'+':''}${r.p2.toFixed(2)}%</td></tr>`});
   h+='</tbody></table></div>';
-
-
-
+  if(recs.length){const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date));
+    h+=`<div class="tw" style="margin-top:20px"><div class="ch"><div class="cd" style="background:var(--cyan)"></div>일별 기록 <span style="margin-left:auto;font-size:11px;color:var(--t3)">${recs.length}건</span></div><div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>상품</th><th>평가금액</th><th>메모</th><th></th></tr></thead><tbody>`;
+    sorted.slice(0,100).forEach(r=>{h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${r.product}</td><td class="am">${ff(r.bal)}</td><td style="text-align:left;color:var(--t3);font-size:11px">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delDR('${r.id}')">삭제</button></td></tr>`});
+    h+='</tbody></table></div>'}
   document.getElementById('paneActive').innerHTML=h;
   if(recs.length>=2)setTimeout(()=>{drawCum(recs);drawPD(recs)},60);
 }
@@ -754,57 +713,8 @@ function saveAddItem(){
 }
 function donut(data){const total=data.reduce((s,d)=>s+d.val,0);if(!total)return'<div class="em">데이터 없음</div>';const R=72,CX=90,CY=90,SW=18,ci=2*Math.PI*R;let cu=0,p='';data.forEach(d=>{const f=d.val/total,da=ci*f,ga=ci-da,o=-ci*cu+ci*.25;p+=`<circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="${d.color}" stroke-width="${SW}" stroke-dasharray="${da} ${ga}" stroke-dashoffset="${o}" opacity=".85"/>`;cu+=f});const lg2=data.map(d=>`<div class="li"><div class="ld" style="background:${d.color}"></div><span class="ln">${d.name}</span><span class="lp">${(d.val/total*100).toFixed(1)}%</span></div>`).join('');return`<div class="dw"><svg width="180" height="180" viewBox="0 0 180 180"><circle cx="${CX}" cy="${CY}" r="${R}" fill="none" stroke="rgba(255,255,255,.03)" stroke-width="${SW}"/>${p}<text x="${CX}" y="${CY-6}" text-anchor="middle" fill="var(--t3)" font-size="10" font-family="Outfit">합계</text><text x="${CX}" y="${CY+12}" text-anchor="middle" fill="var(--t1)" font-size="13" font-weight="600" font-family="DM Mono">${fmt(total)}</text></svg><div class="lg">${lg2}</div></div>`}
 
-// =========== DATA EXPORT/IMPORT (기기간 동기화) ===========
-function exportAllData(){
-  const data={
-    cats:localStorage.getItem('pt_cats_v3'),
-    cash:localStorage.getItem('pt_cash_v3'),
-    daily:localStorage.getItem('pt_daily_v3'),
-    balHist:localStorage.getItem('pt_balhist_v3'),
-    futures:localStorage.getItem('pt_futures_v1'),
-    exportDate:new Date().toISOString()
-  };
-  const json=JSON.stringify(data,null,2);
-  const blob=new Blob([json],{type:'application/json'});
-  const a=document.createElement('a');
-  a.href=URL.createObjectURL(blob);
-  a.download='portfolio_backup_'+today()+'.json';
-  a.click();
-}
-function importAllData(){
-  const inp=document.createElement('input');
-  inp.type='file';inp.accept='.json';
-  inp.onchange=function(e){
-    const file=e.target.files[0];if(!file)return;
-    const reader=new FileReader();
-    reader.onload=function(ev){
-      try{
-        const data=JSON.parse(ev.target.result);
-        if(!data.cats&&!data.balHist){alert('올바른 백업 파일이 아닙니다.');return}
-        if(!confirm('현재 데이터를 백업 파일로 덮어쓰시겠습니까?\n(내보낸 날짜: '+(data.exportDate||'알 수 없음')+')'))return;
-        if(data.cats)localStorage.setItem('pt_cats_v3',data.cats);
-        if(data.cash)localStorage.setItem('pt_cash_v3',data.cash);
-        if(data.daily)localStorage.setItem('pt_daily_v3',data.daily);
-        if(data.balHist)localStorage.setItem('pt_balhist_v3',data.balHist);
-        if(data.futures)localStorage.setItem('pt_futures_v1',data.futures);
-        alert('데이터를 복원했습니다. 페이지를 새로고침합니다.');
-        // Sync imported data to server
-        fetch('/api/data/bulk',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
-          pt_cats_v3:JSON.parse(data.cats||'null'),
-          pt_cash_v3:JSON.parse(data.cash||'null'),
-          pt_daily_v3:JSON.parse(data.daily||'null'),
-          pt_balhist_v3:JSON.parse(data.balHist||'null'),
-          pt_futures_v1:JSON.parse(data.futures||'null')
-        })}).finally(()=>location.reload());
-      }catch(err){alert('파일 읽기 오류: '+err.message)}
-    };
-    reader.readAsText(file);
-  };
-  inp.click();
-}
-
 // =========== ASSET MANAGER ===========
-function openMgr(){const cats=getCats();let h=`<div class="modal-bg" onclick="if(event.target===this)closeMgr()"><div class="modal"><h3>⚙ 자산 관리<button class="modal-close" onclick="closeMgr()">✕</button></h3><div class="nb">카테고리 및 자산 항목을 추가/삭제할 수 있습니다.</div>`;cats.forEach(cat=>{h+=`<div style="margin-bottom:20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div class="cd" style="background:${cat.color}"></div><span style="font-weight:700;font-size:14px">${cat.name}</span><button class="btn bd" style="padding:3px 10px;font-size:10px;margin-left:auto" onclick="delCat('${cat.id}')">카테고리 삭제</button></div><div class="mgr">`;cat.items.forEach(it=>{if(it.name==='현금')return;h+=`<div class="mgr-item"><span>${it.name}</span><span class="am" style="color:var(--t3)">기초: ${ff(it.init)}</span><button class="btn bd" style="padding:2px 8px;font-size:10px" onclick="delItem('${cat.id}','${it.id}')">삭제</button></div>`});h+=`</div><div class="mgr-add"><input type="text" id="newItem_${cat.id}" placeholder="새 상품명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><input type="number" id="newItemInit_${cat.id}" placeholder="기초금액" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;width:120px;font-family:'DM Mono',monospace"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addItem('${cat.id}')">+ 추가</button></div></div>`});h+=`<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">새 카테고리 추가</div><div class="mgr-add"><input type="text" id="newCatName" placeholder="카테고리명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addCat()">+ 추가</button></div></div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn bo2" onclick="exportAllData()">📥 백업 내보내기</button><button class="btn bo2" onclick="closeMgr();importAllData()">📤 백업 가져오기</button><button class="btn bd" onclick="if(confirm('모든 데이터를 초기화하시겠습니까?')){Object.values(SK).forEach(k=>localStorage.removeItem(k));closeMgr();render()}">전체 초기화</button><button class="btn bp" onclick="closeMgr()">닫기</button></div></div></div>`;document.getElementById('modalRoot').innerHTML=h}
+function openMgr(){const cats=getCats();let h=`<div class="modal-bg" onclick="if(event.target===this)closeMgr()"><div class="modal"><h3>⚙ 자산 관리<button class="modal-close" onclick="closeMgr()">✕</button></h3><div class="nb">카테고리 및 자산 항목을 추가/삭제할 수 있습니다.</div>`;cats.forEach(cat=>{h+=`<div style="margin-bottom:20px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:8px"><div class="cd" style="background:${cat.color}"></div><span style="font-weight:700;font-size:14px">${cat.name}</span><button class="btn bd" style="padding:3px 10px;font-size:10px;margin-left:auto" onclick="delCat('${cat.id}')">카테고리 삭제</button></div><div class="mgr">`;cat.items.forEach(it=>{if(it.name==='현금')return;h+=`<div class="mgr-item"><span>${it.name}</span><span class="am" style="color:var(--t3)">기초: ${ff(it.init)}</span><button class="btn bd" style="padding:2px 8px;font-size:10px" onclick="delItem('${cat.id}','${it.id}')">삭제</button></div>`});h+=`</div><div class="mgr-add"><input type="text" id="newItem_${cat.id}" placeholder="새 상품명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><input type="number" id="newItemInit_${cat.id}" placeholder="기초금액" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;width:120px;font-family:'DM Mono',monospace"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addItem('${cat.id}')">+ 추가</button></div></div>`});h+=`<div style="border-top:1px solid var(--border);padding-top:16px;margin-top:8px"><div style="font-weight:600;font-size:13px;margin-bottom:10px">새 카테고리 추가</div><div class="mgr-add"><input type="text" id="newCatName" placeholder="카테고리명" style="padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;color:var(--t1);font-size:12px;flex:1"><button class="btn bg2" style="padding:6px 14px;font-size:11px" onclick="addCat()">+ 추가</button></div></div><div style="margin-top:16px;display:flex;gap:8px;justify-content:flex-end"><button class="btn bd" onclick="if(confirm('모든 데이터를 초기화하시겠습니까?')){Object.values(SK).forEach(k=>localStorage.removeItem(k));closeMgr();render()}">전체 초기화</button><button class="btn bp" onclick="closeMgr()">닫기</button></div></div></div>`;document.getElementById('modalRoot').innerHTML=h}
 function closeMgr(){document.getElementById('modalRoot').innerHTML='';render()}
 function addCat(){const name=document.getElementById('newCatName').value.trim();if(!name){alert('카테고리명을 입력하세요.');return}const cats=getCats();cats.push({id:uid(),name,color:CAT_COLORS[cats.length%CAT_COLORS.length],items:[]});saveCats(cats);openMgr()}
 function delCat(catId){if(!confirm('이 카테고리를 삭제하시겠습니까?'))return;saveCats(getCats().filter(c=>c.id!==catId));openMgr()}
@@ -812,10 +722,5 @@ function addItem(catId){const name=document.getElementById('newItem_'+catId).val
 function delItem(catId,itemId){if(!confirm('이 상품을 삭제하시겠습니까?'))return;const cats=getCats();const cat=cats.find(c=>c.id===catId);if(!cat)return;cat.items=cat.items.filter(i=>i.id!==itemId);saveCats(cats);openMgr()}
 
 // =========== INIT ===========
-// Load data from server, then render
-fetch('/api/data').then(function(r){return r.json()}).then(function(data){
-  Object.entries(data).forEach(function(e){_cache[e[0]]=e[1];try{localStorage.setItem(e[0],JSON.stringify(e[1]))}catch(x){}});
-}).catch(function(e){console.log('Server load failed:',e.message)}).finally(function(){
-  renderTabs();render();
-});
+renderTabs();render();
 window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50)});
