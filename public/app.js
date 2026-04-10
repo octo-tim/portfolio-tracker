@@ -1,7 +1,15 @@
 // =========== STORAGE ===========
 const SK={cats:'pt_cats_v3',cash:'pt_cash_v3',daily:'pt_daily_v3',balHist:'pt_balhist_v3'};
-const lsG=k=>{try{return JSON.parse(localStorage.getItem(k))}catch{return null}};
-const lsS=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+const _cache={};
+const lsG=k=>{
+  if(_cache[k]!==undefined)return _cache[k];
+  try{const v=localStorage.getItem(k);return v?JSON.parse(v):null}catch{return null}
+};
+const lsS=(k,v)=>{
+  _cache[k]=v;
+  try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}
+  fetch('/api/data/'+encodeURIComponent(k),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({value:v})}).catch(()=>{});
+};
 const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today=()=>new Date().toISOString().slice(0,10);
 const PAL=['#4d8eff','#2ee8a5','#ffb84d','#ff5c72','#a78bfa','#fb923c','#22d3ee','#f472b6','#818cf8','#38bdf8','#4ade80','#e879f9'];
@@ -722,5 +730,10 @@ function addItem(catId){const name=document.getElementById('newItem_'+catId).val
 function delItem(catId,itemId){if(!confirm('이 상품을 삭제하시겠습니까?'))return;const cats=getCats();const cat=cats.find(c=>c.id===catId);if(!cat)return;cat.items=cat.items.filter(i=>i.id!==itemId);saveCats(cats);openMgr()}
 
 // =========== INIT ===========
-renderTabs();render();
+// Boot: load from server DB first
+fetch('/api/data').then(function(r){return r.json()}).then(function(data){
+  Object.entries(data).forEach(function(e){_cache[e[0]]=e[1];try{localStorage.setItem(e[0],JSON.stringify(e[1]))}catch(x){}});
+}).catch(function(e){console.log('Server load failed:',e.message)}).finally(function(){
+  renderTabs();render();
+});
 window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50)});
