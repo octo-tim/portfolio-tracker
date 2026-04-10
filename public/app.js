@@ -195,27 +195,28 @@ function rFin(){
   if(histDatesAll.length>=2){
     const itemBalMap={};
     hist.forEach(r=>{itemBalMap[r.date+'|'+r.itemId]=r.bal});
-    const showDays=histDatesAll.slice(-14);
-    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>일별 수익 금액 (꿈비 제외, 최근 ${showDays.length-1}일)</div>
-      <div class="tbl-scroll"><table style="min-width:500px"><thead><tr><th>날짜</th>`;
-    finItemsForPnl.forEach(it=>{h+=`<th style="text-align:right;font-size:10px;white-space:nowrap;padding:6px 4px">${it.name}</th>`});
-    h+=`<th style="text-align:right;font-weight:700">합계</th></tr></thead><tbody>`;
+    const showDays=histDatesAll.slice(-30);
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>일별 수익 금액 (꿈비 제외)</div>
+      <div class="tbl-scroll"><table><thead><tr><th>날짜</th><th style="text-align:right">일별 손익</th><th style="text-align:right">누적 손익</th></tr></thead><tbody>`;
     const revDays=[...showDays].reverse();
-    revDays.forEach((d,di)=>{
-      if(di>=revDays.length-1)return;
-      const prevD=revDays[di+1];
-      let rowTotal=0,cells='';
+    let cumSum=0;
+    // First calculate cumulative forward, then display reverse
+    const rowData=[];
+    for(let i=1;i<showDays.length;i++){
+      const d=showDays[i],prevD=showDays[i-1];
+      let dayTotal=0;
       finItemsForPnl.forEach(it=>{
         const cur=itemBalMap[d+'|'+it.id];
         const prev=itemBalMap[prevD+'|'+it.id];
-        if(cur!==undefined&&prev!==undefined){
-          const diff=cur-prev;rowTotal+=diff;
-          cells+=`<td class="am ${diff>=0?'up':'dn'}" style="font-size:11px;padding:6px 4px">${diff!==0?((diff>=0?'+':'')+ff(diff)):'-'}</td>`;
-        }else{
-          cells+=`<td class="am" style="font-size:11px;padding:6px 4px;color:var(--t3)">-</td>`;
-        }
+        if(cur!==undefined&&prev!==undefined) dayTotal+=cur-prev;
       });
-      h+=`<tr><td style="text-align:left" class="am">${d}</td>${cells}<td class="am ${rowTotal>=0?'up':'dn'}" style="font-weight:600">${rowTotal>=0?'+':''}${ff(rowTotal)}</td></tr>`;
+      cumSum+=dayTotal;
+      rowData.push({date:d,daily:dayTotal,cum:cumSum});
+    }
+    [...rowData].reverse().forEach(r=>{
+      h+=`<tr><td style="text-align:left" class="am">${r.date}</td>
+        <td class="am ${r.daily>=0?'up':'dn'}" style="font-weight:500">${r.daily>=0?'+':''}${ff(r.daily)}</td>
+        <td class="am ${r.cum>=0?'up':'dn'}">${r.cum>=0?'+':''}${ff(r.cum)}</td></tr>`;
     });
     h+=`</tbody></table></div></div>`;
   }
