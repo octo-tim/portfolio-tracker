@@ -428,7 +428,7 @@ function rFutures(){
   // Monthly cumulative
   let cum=0;const monthData=d.monthly.map(m=>{cum+=m.pnl;return{...m,cum}});
   const ytd=cum;
-  const mtd=d.monthly.length?d.monthly[d.monthly.length-1].pnl+totalPnl:totalPnl;
+  const curMon=new Date().getMonth()+1;const curMonEntry=d.monthly.find(m=>m.month===curMon);const mtd=(curMonEntry?curMonEntry.pnl:0)+totalPnl;
   const plPct=d.budget?(mtd/d.budget):0;
 
   let h=`
@@ -520,9 +520,15 @@ function updateMkt(id){
 }
 
 function closePosition(id){
-  if(!confirm('이 포지션을 청산(계약수 0)으로 변경하시겠습니까?\n실현 손익은 월별 손익에 수동으로 반영하세요.'))return;
   const d=getFut();const p=d.positions.find(x=>x.id===id);
-  if(p){p.contracts=0;p.pos=0;saveFut(d);render()}
+  if(!p)return;
+  const pnl=calcPnl(p,d.fxRate);
+  if(!confirm('이 포지션을 청산하시겠습니까?\n실현 손익: '+(pnl>=0?'+':'')+pnl.toLocaleString()+'원\n해당 금액이 이번 달 실현손익에 자동 반영됩니다.'))return;
+  const now=new Date();const curMonth=now.getMonth()+1;
+  const mEntry=d.monthly.find(m=>m.month===curMonth);
+  if(mEntry){mEntry.pnl+=pnl}else{d.monthly.push({month:curMonth,pnl:pnl})}
+  p.contracts=0;p.pos=0;
+  saveFut(d);render();
 }
 
 function openAddPosition(){
