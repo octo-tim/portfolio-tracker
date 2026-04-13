@@ -428,7 +428,7 @@ function rFutures(){
   // Monthly cumulative
   let cum=0;const monthData=d.monthly.map(m=>{cum+=m.pnl;return{...m,cum}});
   const ytd=cum;
-  const curMon=new Date().getMonth()+1;const curMonEntry=d.monthly.find(m=>m.month===curMon);const mtd=(curMonEntry?curMonEntry.pnl:0)+totalPnl;
+  const mtd=d.monthly.length?d.monthly[d.monthly.length-1].pnl+totalPnl:totalPnl;
   const plPct=d.budget?(mtd/d.budget):0;
 
   let h=`
@@ -520,23 +520,35 @@ function updateMkt(id){
 }
 
 function closePosition(id){
+  if(!confirm('이 포지션을 청산(계약수 0)으로 변경하시겠습니까?\n실현 손익은 월별 손익에 수동으로 반영하세요.'))return;
   const d=getFut();const p=d.positions.find(x=>x.id===id);
-  if(!p)return;
-  const pnl=calcPnl(p,d.fxRate);
-  if(!confirm('이 포지션을 청산하시겠습니까?\n실현 손익: '+(pnl>=0?'+':'')+pnl.toLocaleString()+'원\n해당 금액이 이번 달 실현손익에 자동 반영됩니다.'))return;
-  const now=new Date();const curMonth=now.getMonth()+1;
-  const mEntry=d.monthly.find(m=>m.month===curMonth);
-  if(mEntry){mEntry.pnl+=pnl}else{d.monthly.push({month:curMonth,pnl:pnl})}
-  p.contracts=0;p.pos=0;
-  saveFut(d);render();
+  if(p){p.contracts=0;p.pos=0;saveFut(d);render()}
 }
 
 function openAddPosition(){
+  const presets=[
+    {name:'USDKRW',cat:'FX',mult:12500000,ccy:'KRW'},
+    {name:'JY (엔선물)',cat:'FX',mult:12500000,ccy:'KRW'},
+    {name:'EUR (유로)',cat:'FX',mult:125000,ccy:'USD'},
+    {name:'KTB 3년',cat:'Bond',mult:1000000,ccy:'KRW'},
+    {name:'KTB 10년',cat:'Bond',mult:1000000,ccy:'KRW'},
+    {name:'US Treasury 10Y (ZN)',cat:'Bond',mult:1000,ccy:'USD'},
+    {name:'KOSPI200',cat:'EQ',mult:250000,ccy:'KRW'},
+    {name:'KQ150',cat:'EQ',mult:10000,ccy:'KRW'},
+    {name:'Micro Nasdaq (MNQ)',cat:'EQ',mult:2,ccy:'USD'},
+    {name:'Micro S&P (MES)',cat:'EQ',mult:5,ccy:'USD'},
+    {name:'Crude Oil (MCL)',cat:'Comm',mult:100,ccy:'USD'},
+    {name:'Micro Gold (MGC)',cat:'Comm',mult:10,ccy:'USD'}
+  ];
+  window._npPresets=presets;
+  const pOpts=presets.map((p,i)=>`<option value="${i}">${p.name} (${p.cat}, ${p.ccy}, x${p.mult.toLocaleString()})</option>`).join('');
   const cats=['EQ','FX','Bond','Comm'];
   const catOpts=cats.map(c=>`<option value="${c}">${c}</option>`).join('');
   let h=`<div class="modal-bg" onclick="if(event.target===this)closeAddPos()"><div class="modal">
     <h3>+ 신규 포지션 추가<button class="modal-close" onclick="closeAddPos()">✕</button></h3>
     <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="fg"><label>종목 선택</label><select id="npPreset" onchange="onPresetChange()" style="font-size:13px">
+        <option value="-1">-- 직접 입력 --</option>${pOpts}</select></div>
       <div class="fg"><label>종목명</label><input type="text" id="npName" placeholder="예: Micro Nasdaq (MNQ)"></div>
       <div style="display:flex;gap:10px">
         <div class="fg" style="flex:1"><label>자산군</label><select id="npCat">${catOpts}</select></div>
@@ -544,7 +556,7 @@ function openAddPosition(){
       </div>
       <div style="display:flex;gap:10px">
         <div class="fg" style="flex:1"><label>계약수 (+매수/-매도)</label><input type="number" id="npContracts" placeholder="예: 2 또는 -3"></div>
-        <div class="fg" style="flex:1"><label>계약 승수</label><input type="number" id="npMult" placeholder="예: 5"></div>
+        <div class="fg" style="flex:1"><label>계약 승수</label><input type="text" id="npMult" placeholder="예: 5"></div>
       </div>
       <div style="display:flex;gap:10px">
         <div class="fg" style="flex:1"><label>진입가</label><input type="text" id="npEntry" placeholder="진입 가격"></div>
@@ -556,14 +568,23 @@ function openAddPosition(){
   </div></div>`;
   document.getElementById('modalRoot').innerHTML=h;
 }
+function onPresetChange(){
+  const sel=document.getElementById('npPreset');
+  const idx=parseInt(sel.value);
+  if(idx<0||!window._npPresets)return;
+  const p=window._npPresets[idx];
+  document.getElementById('npName').value=p.name;
+  document.getElementById('npCat').value=p.cat;
+  document.getElementById('npCcy').value=p.ccy;
+  document.getElementById('npMult').value=p.mult.toLocaleString();
+}
 function closeAddPos(){document.getElementById('modalRoot').innerHTML=''}
-
 function saveNewPosition(){
   const name=document.getElementById('npName').value.trim();
   const cat=document.getElementById('npCat').value;
   const ccy=document.getElementById('npCcy').value;
   const contracts=parseInt(document.getElementById('npContracts').value);
-  const mult=parseFloat(document.getElementById('npMult').value);
+  const mult=parseFloat(document.getElementById('npMult').value.replace(/,/g,''));
   const entry=parseFloat(document.getElementById('npEntry').value.replace(/,/g,''));
   const mkt=parseFloat(document.getElementById('npMkt').value.replace(/,/g,''));
   const date=document.getElementById('npDate').value;
