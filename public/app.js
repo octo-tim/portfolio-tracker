@@ -195,28 +195,27 @@ function rFin(){
   if(histDatesAll.length>=2){
     const itemBalMap={};
     hist.forEach(r=>{itemBalMap[r.date+'|'+r.itemId]=r.bal});
-    const showDays=histDatesAll.slice(-30);
-    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>일별 수익 금액 (꿈비 제외)</div>
-      <div class="tbl-scroll"><table><thead><tr><th>날짜</th><th style="text-align:right">일별 손익</th><th style="text-align:right">누적 손익</th></tr></thead><tbody>`;
+    const showDays=histDatesAll.slice(-14);
+    h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--green)"></div>일별 수익 금액 (꿈비 제외, 최근 ${showDays.length-1}일)</div>
+      <div class="tbl-scroll"><table style="min-width:500px"><thead><tr><th>날짜</th>`;
+    finItemsForPnl.forEach(it=>{h+=`<th style="text-align:right;font-size:10px;white-space:nowrap;padding:6px 4px">${it.name}</th>`});
+    h+=`<th style="text-align:right;font-weight:700">합계</th></tr></thead><tbody>`;
     const revDays=[...showDays].reverse();
-    let cumSum=0;
-    // First calculate cumulative forward, then display reverse
-    const rowData=[];
-    for(let i=1;i<showDays.length;i++){
-      const d=showDays[i],prevD=showDays[i-1];
-      let dayTotal=0;
+    revDays.forEach((d,di)=>{
+      if(di>=revDays.length-1)return;
+      const prevD=revDays[di+1];
+      let rowTotal=0,cells='';
       finItemsForPnl.forEach(it=>{
         const cur=itemBalMap[d+'|'+it.id];
         const prev=itemBalMap[prevD+'|'+it.id];
-        if(cur!==undefined&&prev!==undefined) dayTotal+=cur-prev;
+        if(cur!==undefined&&prev!==undefined){
+          const diff=cur-prev;rowTotal+=diff;
+          cells+=`<td class="am ${diff>=0?'up':'dn'}" style="font-size:11px;padding:6px 4px">${diff!==0?((diff>=0?'+':'')+ff(diff)):'-'}</td>`;
+        }else{
+          cells+=`<td class="am" style="font-size:11px;padding:6px 4px;color:var(--t3)">-</td>`;
+        }
       });
-      cumSum+=dayTotal;
-      rowData.push({date:d,daily:dayTotal,cum:cumSum});
-    }
-    [...rowData].reverse().forEach(r=>{
-      h+=`<tr><td style="text-align:left" class="am">${r.date}</td>
-        <td class="am ${r.daily>=0?'up':'dn'}" style="font-weight:500">${r.daily>=0?'+':''}${ff(r.daily)}</td>
-        <td class="am ${r.cum>=0?'up':'dn'}">${r.cum>=0?'+':''}${ff(r.cum)}</td></tr>`;
+      h+=`<tr><td style="text-align:left" class="am">${d}</td>${cells}<td class="am ${rowTotal>=0?'up':'dn'}" style="font-weight:600">${rowTotal>=0?'+':''}${ff(rowTotal)}</td></tr>`;
     });
     h+=`</tbody></table></div></div>`;
   }
@@ -429,7 +428,7 @@ function rFutures(){
   // Monthly cumulative
   let cum=0;const monthData=d.monthly.map(m=>{cum+=m.pnl;return{...m,cum}});
   const ytd=cum;
-  const mtd=d.monthly.length?d.monthly[d.monthly.length-1].pnl+totalPnl:totalPnl;
+  const curMon=new Date().getMonth()+1;const curMonEntry=d.monthly.find(m=>m.month===curMon);const mtd=(curMonEntry?curMonEntry.pnl:0)+totalPnl;
   const plPct=d.budget?(mtd/d.budget):0;
 
   let h=`
@@ -521,9 +520,15 @@ function updateMkt(id){
 }
 
 function closePosition(id){
-  if(!confirm('이 포지션을 청산(계약수 0)으로 변경하시겠습니까?\n실현 손익은 월별 손익에 수동으로 반영하세요.'))return;
   const d=getFut();const p=d.positions.find(x=>x.id===id);
-  if(p){p.contracts=0;p.pos=0;saveFut(d);render()}
+  if(!p)return;
+  const pnl=calcPnl(p,d.fxRate);
+  if(!confirm('이 포지션을 청산하시겠습니까?\n실현 손익: '+(pnl>=0?'+':'')+pnl.toLocaleString()+'원\n해당 금액이 이번 달 실현손익에 자동 반영됩니다.'))return;
+  const now=new Date();const curMonth=now.getMonth()+1;
+  const mEntry=d.monthly.find(m=>m.month===curMonth);
+  if(mEntry){mEntry.pnl+=pnl}else{d.monthly.push({month:curMonth,pnl:pnl})}
+  p.contracts=0;p.pos=0;
+  saveFut(d);render();
 }
 
 function openAddPosition(){
