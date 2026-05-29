@@ -235,6 +235,23 @@ function rFin(){
     <span style="margin-left:auto;font-size:10px;color:var(--t3);font-weight:400">위 기준일 선택과 연동</span></div>
     <canvas id="itemReturnChart" height="280"></canvas></div>`;
 
+  // ===== 전 상품 기준일별 수익 현황 (매트릭스) =====
+  h+=`<div class="tw"><div class="ch"><div class="cd" style="background:var(--cyan)"></div>전 상품 기준일별 수익 현황
+    <span style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+      <span style="font-size:11px;color:var(--t3);font-weight:400">표시:</span>
+      <select id="matrixMode" onchange="renderItemMatrix()" style="padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:11px;font-family:'DM Mono',monospace">
+        <option value="pct">수익률(%)</option>
+        <option value="pnl">손익금액(원)</option>
+        <option value="bal">잔액(원)</option>
+      </select>
+      <span style="font-size:11px;color:var(--t3);font-weight:400;margin-left:6px">기준:</span>
+      <select id="matrixBase" onchange="renderItemMatrix()" style="padding:5px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--t1);font-size:11px;font-family:'DM Mono',monospace">
+        <option value="init">기초금액</option>
+        <option value="prev">전일</option>
+      </select>
+    </span></div>
+    <div id="itemMatrixBody"></div></div>`;
+
   // ===== 일별 손익 변화 그래프 =====
   h+=`<div class="cg">
     <div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 손익 변화</div><canvas id="dailyPnlChart" height="240"></canvas></div>
@@ -243,7 +260,101 @@ function rFin(){
 
   
   document.getElementById('paneActive').innerHTML=h;
-  setTimeout(()=>{renderPnlTable();drawItemReturnChart();drawDailyPnlChart();drawMonthlyPnlChart()},50);
+  setTimeout(()=>{renderPnlTable();drawItemReturnChart();renderItemMatrix();drawDailyPnlChart();drawMonthlyPnlChart()},50);
+}
+
+// ===== 전 상품 기준일별 수익 현황 테이블 =====
+function renderItemMatrix(){
+  const wrap=document.getElementById('itemMatrixBody');if(!wrap)return;
+  const modeSel=document.getElementById('matrixMode');
+  const baseSel=document.getElementById('matrixBase');
+  const mode=modeSel?modeSel.value:'pct';
+  const baseMode=baseSel?baseSel.value:'init';
+  const hist=getBalHist();
+  const cats=getCats();
+  const finCat=cats[0];if(!finCat){wrap.innerHTML='<div class="em">데이터 없음</div>';return}
+  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+  const dates=[...new Set(hist.map(h=>h.date))].sort();
+  if(!dates.length){wrap.innerHTML='<div class="em" style="padding:20px">기록된 일별 잔액이 없습니다.</div>';return}
+  // Map: date|itemId -> bal
+  const balMap={};
+  hist.forEach(r=>{balMap[r.date+'|'+r.itemId]=r.bal});
+
+  // For each item: compute value per date based on mode/baseMode
+  // bal: just balance
+  // pct/pnl: relative to baseMode (init or prev recorded date)
+  let html='<div class="tbl-scroll"><table style="min-width:'+(160+dates.length*90)+'px"><thead><tr>';
+  html+='<th style="text-align:left;position:sticky;left:0;background:rgba(0,0,0,.35);z-index:2">상품</th>';
+  if(mode!=='bal')html+='<th style="text-align:right">기초</th>';
+  dates.forEach(d=>{html+='<th style="text-align:right;font-size:9px;white-space:nowrap;padding:6px 8px">'+d.slice(5)+'</th>'});
+  html+='</tr></thead><tbody>';
+
+  let totRow={};dates.forEach(d=>totRow[d]={base:0,bal:0});
+  let totInit=0;
+
+  items.forEach((it,idx)=>{
+    const isGg=it.name==='꿈비';
+    html+='<tr'+(isGg?' style="opacity:.5"':'')+'><td style="text-align:left;font-weight:500;position:sticky;left:0;background:var(--card);z-index:1">'+it.name+(isGg?' <span style="font-size:9px;color:var(--t3)">(제외)</span>':'')+'</td>';
+    if(mode!=='bal')html+='<td class="am" style="color:var(--t3)">'+fmt(it.init)+'</td>';
+    totInit+=it.init;
+
+    let prevBal=null;
+    dates.forEach(d=>{
+      const cur=balMap[d+'|'+it.id];
+      let cell='-',cls='',color='var(--t3)';
+      if(cur!==undefined){
+        if(mode==='bal'){
+          cell=fmt(cur);color='var(--t1)';
+        }else{
+          let base;
+          if(baseMode==='init')base=it.init;
+          else base=(prevBal!==null?prevBal:it.init);
+          if(base){
+            if(mode==='pct'){
+              const p=pct(cur,base);
+              cell=(p>=0?'+':'')+p.toFixed(2)+'%';
+              cls=p>=0?'up':'dn';color='';
+            }else{ // pnl
+              const diff=cur-base;
+              cell=(diff>=0?'+':'')+fmt(diff);
+              cls=diff>=0?'up':'dn';color='';
+            }
+          }
+        }
+        if(!isGg){
+          totRow[d].bal+=cur;
+          totRow[d].base+=(baseMode==='init'?it.init:(prevBal!==null?prevBal:it.init));
+        }
+        prevBal=cur;
+      }
+      html+='<td class="am '+cls+'" style="font-size:11px;padding:6px 8px'+(color?';color:'+color:'')+'">'+cell+'</td>';
+    });
+    html+='</tr>';
+  });
+
+  // Total row (꿈비 제외)
+  const totInitEx=items.filter(x=>x.name!=='꿈비').reduce((s,i)=>s+i.init,0);
+  html+='<tr class="fr"><td style="text-align:left;position:sticky;left:0;background:rgba(77,142,255,.08);z-index:1">합계 (꿈비 제외)</td>';
+  if(mode!=='bal')html+='<td class="am">'+fmt(totInitEx)+'</td>';
+  dates.forEach(d=>{
+    const r=totRow[d];
+    let cell='-',cls='';
+    if(r.bal>0){
+      if(mode==='bal'){cell=fmt(r.bal);}
+      else if(mode==='pct'){
+        const base=baseMode==='init'?totInitEx:r.base;
+        if(base){const p=pct(r.bal,base);cell=(p>=0?'+':'')+p.toFixed(2)+'%';cls=p>=0?'up':'dn';}
+      }else{
+        const base=baseMode==='init'?totInitEx:r.base;
+        const diff=r.bal-base;cell=(diff>=0?'+':'')+fmt(diff);cls=diff>=0?'up':'dn';
+      }
+    }
+    html+='<td class="am '+cls+'" style="font-size:11px;padding:6px 8px;font-weight:700">'+cell+'</td>';
+  });
+  html+='</tr>';
+
+  html+='</tbody></table></div>';
+  wrap.innerHTML=html;
 }
 
 function findItemName(itemId){let name='?';getCats().forEach(c=>c.items.forEach(it=>{if(it.id===itemId)name=it.name}));return name}
