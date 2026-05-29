@@ -390,7 +390,7 @@ function drawItemReturnChart(){
   data.forEach(d=>{const w=ctx.measureText(d.name).width;if(w>labelW)labelW=w});
   labelW=Math.min(labelW+12,160);
 
-  const pad={t:topPad,b:botPad,l:labelW+10,r:90};
+  const pad={t:topPad,b:botPad,l:labelW+10,r:160};
   const cW=W-pad.l-pad.r;
   const mx=Math.max(...data.map(d=>Math.abs(d.ret)),1);
   // Zero line in center
@@ -423,11 +423,15 @@ function drawItemReturnChart(){
     ctx.fillStyle='#eaf0f9';ctx.font='500 11px Noto Sans KR';ctx.textAlign='right';ctx.textBaseline='middle';
     ctx.fillText(d.name,pad.l-8,y+bH/2);
     // Return % label (right of bar)
-    ctx.fillStyle=co;ctx.font='600 11px DM Mono';ctx.textAlign='left';ctx.textBaseline='middle';
-    const txt=(d.ret>=0?'+':'')+d.ret.toFixed(2)+'%';
-    const labelX=d.ret>=0?(x+w+6):(x-6);
+    ctx.fillStyle=co;ctx.font='600 11px DM Mono';ctx.textBaseline='middle';
+    const pctTxt=(d.ret>=0?'+':'')+d.ret.toFixed(2)+'%';
+    const pctX=d.ret>=0?(x+w+6):(x-6);
     ctx.textAlign=d.ret>=0?'left':'right';
-    ctx.fillText(txt,labelX,y+bH/2);
+    ctx.fillText(pctTxt,pctX,y+bH/2);
+    // P&L amount label (right-side column, aligned)
+    const pnlTxt=(d.pnl>=0?'+':'')+fmt(d.pnl);
+    ctx.fillStyle=co;ctx.font='500 10px DM Mono';ctx.textAlign='right';
+    ctx.fillText(pnlTxt,W-8,y+bH/2);
   });
   ctx.textBaseline='alphabetic';
 }
