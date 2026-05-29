@@ -14,7 +14,7 @@ const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,6);
 const today=()=>new Date().toISOString().slice(0,10);
 const PAL=['#4d8eff','#2ee8a5','#ffb84d','#ff5c72','#a78bfa','#fb923c','#22d3ee','#f472b6','#818cf8','#38bdf8','#4ade80','#e879f9'];
 const CAT_COLORS=['#4d8eff','#2ee8a5','#ffb84d','#a78bfa','#22d3ee','#fb923c','#f472b6','#818cf8'];
-const CUM_PROFIT=193822312;
+const CUM_PROFIT=242975671;
 
 // =========== DEFAULT DATA ===========
 const DEFAULT_CATS=[
