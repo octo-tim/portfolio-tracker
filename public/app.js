@@ -48,12 +48,30 @@ function saveDaily(r){lsS(SK.daily,r)}
 function getBalHist(){return lsG(SK.balHist)||[]}
 function saveBalHist(r){lsS(SK.balHist,r)}
 
+// =========== FINANCIAL SCOPE HELPERS ===========
+// 금융투자에서 제외할 카테고리 이름 (비금융 자산 + 현금)
+const NON_FIN_CATS=new Set(['현금','부동산투자','사업투자','지인대여']);
+function isFinCat(cat){return cat&&!NON_FIN_CATS.has(cat.name)}
+// cats(또는 live()) 배열에서 금융투자 상품 전체를 평탄화해서 반환 (현금 제외)
+function getFinItems(catsArr){
+  const out=[];
+  (catsArr||[]).forEach(cat=>{
+    if(!isFinCat(cat))return;
+    cat.items.forEach(it=>{if(it.name!=='현금')out.push(it)});
+  });
+  return out;
+}
+// 위와 동일하지만 init/bal 중 하나라도 있는 상품만
+function getFinItemsActive(catsArr){return getFinItems(catsArr).filter(x=>x.init||x.bal)}
+
 // =========== LIVE DATA ===========
 function live(){
   const c=JSON.parse(JSON.stringify(getCats()));
-  let cashCat=c[0];if(!cashCat)return c;
+  if(!c.length)return c;
+  // 현금 카테고리 우선 탐색, 없으면 첫 카테고리에 추가
+  let cashCat=c.find(cat=>cat.name==='현금')||c[0];
   let cashItem=null;
-  c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashItem=it}));
+  c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashItem=it}));
   if(!cashItem){cashItem={id:'i_cash',name:'현금',init:0,bal:0};cashCat.items.push(cashItem)}
   getCash().forEach(tx=>{
     if(tx.isInvestment&&tx.linkedProduct){
@@ -79,7 +97,7 @@ const pct=(a,b)=>b===0?0:((a-b)/b*100);
 function getDailyProfit(){
   const hist=getBalHist();if(!hist.length)return 0;
   const cats=getCats();
-  const finItems=cats[0]?cats[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'):[];
+  const finItems=getFinItems(cats).filter(x=>x.name!=='꿈비');
   const dates=[...new Set(hist.map(h=>h.date))].sort();
   if(dates.length<2){
     const d0=dates[0];const recs=hist.filter(h=>h.date===d0);
@@ -101,7 +119,7 @@ function getDailyProfit(){
 function getDailyPnLSeries(){
   const hist=getBalHist();if(!hist.length)return{dates:[],daily:[],monthly:{}};
   const cats=getCats();
-  const finItems=cats[0]?cats[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'):[];
+  const finItems=getFinItems(cats).filter(x=>x.name!=='꿈비');
   const dates=[...new Set(hist.map(h=>h.date))].sort();
   // Build total per date
   const totals=[];
@@ -143,10 +161,10 @@ function renderSum(){
   const ti=all.reduce((s,i)=>s+i.init,0),tb=all.reduce((s,i)=>s+i.bal,0);
   const gg=all.find(x=>x.name==='꿈비');const ggPnl=gg?(gg.bal-gg.init):0;
   const pnl=tb-ti-ggPnl,pp=ti?pct(ti+pnl,ti):0;
-  const finCat2=c[0];const finIt2=finCat2?finCat2.items.filter(x=>x.init||x.bal):[];
+  const finIt2=getFinItemsActive(c);
   const finI2=finIt2.reduce((s,i)=>s+i.init,0),finB2=finIt2.reduce((s,i)=>s+i.bal,0);
   const finPnlExGg=finB2-finI2-ggPnl;const totalCum=CUM_PROFIT+finPnlExGg;
-  const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashArr.push(it)}));
+  const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashArr.push(it)}));
   const cashBal=cashArr.length?cashArr[0].bal:0;
   const dailyP=getDailyProfit();
   const cumPp=ti?pct(ti+totalCum,ti):0;
@@ -163,12 +181,12 @@ function render(){renderSum();document.getElementById('mainContent').innerHTML='
 
 // =========== 금융투자자산 ===========
 function rFin(){
-  const cats=getCats();const finCat=cats[0];
-  if(!finCat){document.getElementById('paneActive').innerHTML='<div class="em">금융투자 카테고리가 없습니다.</div>';return}
-  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+  const cats=getCats();
+  const items=getFinItemsActive(cats);
+  if(!items.length){document.getElementById('paneActive').innerHTML='<div class="em">금융투자 상품이 없습니다.</div>';return}
   const hist=getBalHist();
   const liveC=live();
-  const liveItems=liveC[0]?liveC[0].items.filter(x=>x.name!=='현금'&&(x.init||x.bal)):[];
+  const liveItems=getFinItemsActive(liveC);
 
   let h=`
     <div class="nb">📊 <b>금융투자 상품별 일별 잔액</b>을 아래 테이블에서 한번에 입력합니다.<br>
@@ -272,8 +290,8 @@ function renderItemMatrix(){
   const baseMode=baseSel?baseSel.value:'init';
   const hist=getBalHist();
   const cats=getCats();
-  const finCat=cats[0];if(!finCat){wrap.innerHTML='<div class="em">데이터 없음</div>';return}
-  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+  const items=getFinItemsActive(cats);
+  if(!items.length){wrap.innerHTML='<div class="em">금융투자 상품이 없습니다.</div>';return}
   const dates=[...new Set(hist.map(h=>h.date))].sort();
   if(!dates.length){wrap.innerHTML='<div class="em" style="padding:20px">기록된 일별 잔액이 없습니다.</div>';return}
   // Map: date|itemId -> bal
@@ -424,8 +442,8 @@ function onBatchInput(el){
   }else{diffEl.innerHTML='-';el.classList.remove('batch-changed')}
 }
 function loadPrevDay(){
-  const cats=getCats(),finCat=cats[0];if(!finCat)return;
-  const items=finCat.items.filter(x=>x.name!=="현금"&&(x.init||x.bal));
+  const cats=getCats();
+  const items=getFinItemsActive(cats);
   const hist=getBalHist();
   const latestByItem={};
   hist.forEach(r=>{if(!latestByItem[r.itemId]||r.date>latestByItem[r.itemId].date)latestByItem[r.itemId]=r});
@@ -453,8 +471,8 @@ function loadPrevDay(){
 }
 function saveBatch(){
   const date=document.getElementById('batchDate').value;if(!date){alert('날짜를 선택하세요.');return}
-  const cats=getCats(),finCat=cats[0];if(!finCat)return;
-  const items=finCat.items.filter(x=>x.name!=='현금'&&(x.init||x.bal));
+  const cats=getCats();
+  const items=getFinItemsActive(cats);
   const h2=getBalHist().filter(r=>r.date!==date),d=getDaily().filter(r=>r.date!==date);let count=0;
   items.forEach(it=>{const inp=document.getElementById('batch_'+it.id);if(!inp||!inp.value)return;
     const num=parseInt(inp.value.replace(/,/g,''));if(isNaN(num))return;
@@ -471,7 +489,7 @@ function drawItemReturnChart(){
   const baseVal=sel?sel.value:'init';
   const hist=getBalHist();
   const liveC=live();
-  const liveItems=liveC[0]?liveC[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'&&(x.init||x.bal)):[];
+  const liveItems=getFinItemsActive(liveC).filter(x=>x.name!=='꿈비');
   const baseRecs=baseVal!=='init'?hist.filter(h=>h.date===baseVal):[];
 
   // Build (name, return%) for each item
@@ -553,10 +571,10 @@ function renderPnlTable(){
   const baseVal=sel?sel.value:'init';
   const hist=getBalHist();
   const liveC=live();
-  const liveItems=liveC[0]?liveC[0].items.filter(x=>x.name!=='현금'&&(x.init||x.bal)):[];
+  const liveItems=getFinItemsActive(liveC);
   const baseRecs=baseVal!=='init'?hist.filter(h=>h.date===baseVal):[];
-  // Redraw item return chart with new base date
-  setTimeout(drawItemReturnChart,10);
+  // Redraw item return chart + matrix with new base date
+  setTimeout(()=>{drawItemReturnChart();renderItemMatrix();},10);
   let tbl='<div class="tbl-scroll"><table><thead><tr><th>#</th><th>상품명</th><th>기준금액</th><th>현재잔액</th><th>손익(원)</th><th>수익률</th></tr></thead><tbody>';
   let tI=0,tB=0;
   liveItems.forEach((it,i)=>{
@@ -828,7 +846,7 @@ function drawFutMonthly(){
 
 // =========== 현금 입출금 ===========
 function rCash(){
-  const c=live();let cashBal=0;c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금')cashBal=it.bal}));
+  const c=live();let cashBal=0;c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashBal=it.bal}));
   const recs=getCash();
   const prods=[];getCats().forEach(cat=>cat.items.forEach(it=>{if(it.name!=='현금')prods.push({cat:cat.name,name:it.name})}));
   const pOpts=prods.map(p=>`<option value="${p.name}">${p.name} (${p.cat})</option>`).join('');
@@ -857,7 +875,7 @@ function rCumul(){
   const c=live(),all=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.init||it.bal)all.push(it)}));
   const ti=all.reduce((s,i)=>s+i.init,0),tb2=all.reduce((s,i)=>s+i.bal,0);
   const gg2=all.find(x=>x.name==='꿈비');const ggP2=gg2?(gg2.bal-gg2.init):0;
-  const finC3=c[0];const finIt3=finC3?finC3.items.filter(x=>x.init||x.bal):[];
+  const finIt3=getFinItemsActive(c);
   const fI3=finIt3.reduce((s,i)=>s+i.init,0),fB3=finIt3.reduce((s,i)=>s+i.bal,0);
   const finPnl3=fB3-fI3-ggP2;const totalCum2=CUM_PROFIT+finPnl3;
   const cumPp=ti?pct(ti+totalCum2,ti):0;const recs=getDaily();
