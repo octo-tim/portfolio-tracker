@@ -230,6 +230,11 @@ function rFin(){
     </span></div>
     <div id="pnlTableBody"></div></div>`;
 
+  // ===== 상품별 수익률 그래프 (기준일 대비) =====
+  h+=`<div class="cc full" style="margin-bottom:14px"><div class="ct"><div class="cd" style="background:var(--purple)"></div>상품별 수익률 (기준일 대비, 꿈비 제외)
+    <span style="margin-left:auto;font-size:10px;color:var(--t3);font-weight:400">위 기준일 선택과 연동</span></div>
+    <canvas id="itemReturnChart" height="280"></canvas></div>`;
+
   // ===== 일별 손익 변화 그래프 =====
   h+=`<div class="cg">
     <div class="cc"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 손익 변화</div><canvas id="dailyPnlChart" height="240"></canvas></div>
@@ -238,7 +243,7 @@ function rFin(){
 
   
   document.getElementById('paneActive').innerHTML=h;
-  setTimeout(()=>{renderPnlTable();drawDailyPnlChart();drawMonthlyPnlChart()},50);
+  setTimeout(()=>{renderPnlTable();drawItemReturnChart();drawDailyPnlChart();drawMonthlyPnlChart()},50);
 }
 
 function findItemName(itemId){let name='?';getCats().forEach(c=>c.items.forEach(it=>{if(it.id===itemId)name=it.name}));return name}
@@ -348,6 +353,85 @@ function saveBatch(){
 }
 function delBalHist(id){if(!confirm('이 기록을 삭제하시겠습니까?'))return;saveBalHist(getBalHist().filter(r=>r.id!==id));render()}
 
+// ===== CHART: Item Return % (vs base date) =====
+function drawItemReturnChart(){
+  const cv=document.getElementById('itemReturnChart');if(!cv)return;
+  const sel=document.getElementById('baseSelect');
+  const baseVal=sel?sel.value:'init';
+  const hist=getBalHist();
+  const liveC=live();
+  const liveItems=liveC[0]?liveC[0].items.filter(x=>x.name!=='현금'&&x.name!=='꿈비'&&(x.init||x.bal)):[];
+  const baseRecs=baseVal!=='init'?hist.filter(h=>h.date===baseVal):[];
+
+  // Build (name, return%) for each item
+  const data=[];
+  liveItems.forEach(it=>{
+    let baseAmt=it.init;
+    if(baseVal!=='init'){const br=baseRecs.find(r=>r.itemId===it.id);if(br)baseAmt=br.bal;}
+    if(!baseAmt)return;
+    const p=pct(it.bal,baseAmt);
+    data.push({name:it.name,ret:p,pnl:it.bal-baseAmt});
+  });
+  if(!data.length){const wrap=cv.parentElement;wrap.innerHTML+='<div class="em" style="padding:14px">표시할 상품이 없습니다.</div>';return}
+  // sort by return desc
+  data.sort((a,b)=>b.ret-a.ret);
+
+  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.getBoundingClientRect();
+  // Dynamic height based on item count (horizontal bars)
+  const rowH=24,topPad=16,botPad=24;
+  const H=Math.max(280,topPad+botPad+data.length*rowH);
+  cv.style.height=H+'px';
+  cv.width=rect.width*dpr;cv.height=H*dpr;ctx.scale(dpr,dpr);
+  const W=rect.width;
+
+  // Find left label width
+  ctx.font='500 11px Noto Sans KR';
+  let labelW=0;
+  data.forEach(d=>{const w=ctx.measureText(d.name).width;if(w>labelW)labelW=w});
+  labelW=Math.min(labelW+12,160);
+
+  const pad={t:topPad,b:botPad,l:labelW+10,r:90};
+  const cW=W-pad.l-pad.r;
+  const mx=Math.max(...data.map(d=>Math.abs(d.ret)),1);
+  // Zero line in center
+  const zX=pad.l+cW/2;
+
+  // Grid: zero line
+  ctx.strokeStyle='rgba(255,255,255,.08)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(zX,pad.t);ctx.lineTo(zX,H-pad.b);ctx.stroke();
+
+  // Axis ticks (-mx, -mx/2, 0, +mx/2, +mx)
+  const ticks=[-mx,-mx/2,0,mx/2,mx];
+  ctx.fillStyle='#516480';ctx.font='9px DM Mono';ctx.textAlign='center';
+  ticks.forEach(t=>{
+    const x=zX+(t/mx)*(cW/2);
+    ctx.strokeStyle='rgba(255,255,255,.03)';
+    ctx.beginPath();ctx.moveTo(x,pad.t);ctx.lineTo(x,H-pad.b);ctx.stroke();
+    ctx.fillText((t>=0?'+':'')+t.toFixed(1)+'%',x,H-pad.b+14);
+  });
+
+  // Bars
+  const bH=Math.max(10,rowH-8);
+  data.forEach((d,i)=>{
+    const y=pad.t+i*rowH+(rowH-bH)/2;
+    const w=Math.abs(d.ret)/mx*(cW/2);
+    const x=d.ret>=0?zX:zX-w;
+    const co=d.ret>=0?'#2ee8a5':'#ff5c72';
+    // Bar
+    ctx.fillStyle=co;rr(ctx,x,y,Math.max(w,1),bH,3);ctx.fill();
+    // Name label (left)
+    ctx.fillStyle='#eaf0f9';ctx.font='500 11px Noto Sans KR';ctx.textAlign='right';ctx.textBaseline='middle';
+    ctx.fillText(d.name,pad.l-8,y+bH/2);
+    // Return % label (right of bar)
+    ctx.fillStyle=co;ctx.font='600 11px DM Mono';ctx.textAlign='left';ctx.textBaseline='middle';
+    const txt=(d.ret>=0?'+':'')+d.ret.toFixed(2)+'%';
+    const labelX=d.ret>=0?(x+w+6):(x-6);
+    ctx.textAlign=d.ret>=0?'left':'right';
+    ctx.fillText(txt,labelX,y+bH/2);
+  });
+  ctx.textBaseline='alphabetic';
+}
+
 // Render PnL table with selectable base date
 function renderPnlTable(){
   const sel=document.getElementById('baseSelect');
@@ -356,6 +440,8 @@ function renderPnlTable(){
   const liveC=live();
   const liveItems=liveC[0]?liveC[0].items.filter(x=>x.name!=='현금'&&(x.init||x.bal)):[];
   const baseRecs=baseVal!=='init'?hist.filter(h=>h.date===baseVal):[];
+  // Redraw item return chart with new base date
+  setTimeout(drawItemReturnChart,10);
   let tbl='<div class="tbl-scroll"><table><thead><tr><th>#</th><th>상품명</th><th>기준금액</th><th>현재잔액</th><th>손익(원)</th><th>수익률</th></tr></thead><tbody>';
   let tI=0,tB=0;
   liveItems.forEach((it,i)=>{
@@ -789,4 +875,4 @@ fetch('/api/data').then(function(r){return r.json()}).then(function(data){
 }).catch(function(e){console.log('Server load failed:',e.message)}).finally(function(){
   renderTabs();render();
 });
-window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawDailyPnlChart();drawMonthlyPnlChart()},50)});
+window.addEventListener('resize',()=>{if(curTab==='fin')setTimeout(()=>{drawItemReturnChart();drawDailyPnlChart();drawMonthlyPnlChart()},50)});
