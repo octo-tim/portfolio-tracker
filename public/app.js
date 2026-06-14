@@ -972,11 +972,18 @@ function rCumul(){
   if(fs.totals&&fs.totals.length>=2){
     const tot=fs.totals;const dvals=fs.daily;
     let cumP=0;const cumArr=dvals.map(function(v){cumP+=v;return cumP});
+    // 현재일(최신) 실제 누적수익으로 역산: 각 일자 실제누적 = 상대누적 + 오프셋
+    const _c=live();const _finIt=getFinItemsActive(_c);
+    const _finI=_finIt.reduce((s,i)=>s+i.init,0),_finB=_finIt.reduce((s,i)=>s+i.bal,0);
+    const _gg=_c.flatMap(x=>x.items).find(x=>x.name==='꿈비');const _ggPnl=_gg?(_gg.bal-_gg.init):0;
+    const _curCum=CUM_PROFIT+(_finB-_finI-_ggPnl);
+    const _offset=_curCum-(cumArr.length?cumArr[cumArr.length-1]:0);
+    const realCumArr=cumArr.map(function(v){return v+_offset});
     h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 추이 (꿈비 제외)</div><div class="cw"><canvas id="finDC"></canvas></div></div>`;
-    h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 변화표 (꿈비 제외)</div><div class="tbl-scroll"><table style="min-width:480px"><thead><tr><th>날짜</th><th style="text-align:right">금융자산 총액</th><th style="text-align:right">일별 수익</th><th style="text-align:right">누적 수익</th></tr></thead><tbody>`;
+    h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 변화표 (꿈비 제외)</div><div class="tbl-scroll"><table style="min-width:480px"><thead><tr><th>날짜</th><th style="text-align:right">금융자산 총액</th><th style="text-align:right">일별 수익</th><th style="text-align:right">누적 수익(기초대비)</th><th style="text-align:right">누적 투자수익</th></tr></thead><tbody>`;
     for(let i=tot.length-1;i>=0;i--){
-      const cur=tot[i].total;const dp=dvals[i];const cp=cumArr[i];
-      h+=`<tr><td style="text-align:left" class="am">${tot[i].date}</td><td class="am">${ff(cur)}</td><td class="am ${dp>=0?'up':'dn'}">${dp>=0?'+':''}${ff(dp)}</td><td class="am ${cp>=0?'up':'dn'}">${cp>=0?'+':''}${ff(cp)}</td></tr>`;
+      const cur=tot[i].total;const dp=dvals[i];const cp=cumArr[i];const rc=realCumArr[i];
+      h+=`<tr><td style="text-align:left" class="am">${tot[i].date}</td><td class="am">${ff(cur)}</td><td class="am ${dp>=0?'up':'dn'}">${dp>=0?'+':''}${ff(dp)}</td><td class="am ${cp>=0?'up':'dn'}">${cp>=0?'+':''}${ff(cp)}</td><td class="am ${rc>=0?'up':'dn'}" style="font-weight:600">${rc>=0?'+':''}${ff(rc)}</td></tr>`;
     }
     h+='</tbody></table></div></div>';
   }
