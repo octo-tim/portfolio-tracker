@@ -15,6 +15,7 @@ const today=()=>new Date().toISOString().slice(0,10);
 const PAL=['#4d8eff','#2ee8a5','#ffb84d','#ff5c72','#a78bfa','#fb923c','#22d3ee','#f472b6','#818cf8','#38bdf8','#4ade80','#e879f9'];
 const CAT_COLORS=['#4d8eff','#2ee8a5','#ffb84d','#a78bfa','#22d3ee','#fb923c','#f472b6','#818cf8'];
 const CUM_PROFIT=242975671;
+const CUM_ANCHOR_DATE='2026-06-13';const CUM_ANCHOR_VALUE=677589541;const CUM_ANCHOR_FINTOTAL=2718020787;
 
 // =========== DEFAULT DATA ===========
 const DEFAULT_CATS=[
@@ -170,7 +171,10 @@ function renderSum(){
   const pnl=tb-ti-ggPnl,pp=ti?pct(ti+pnl,ti):0;
   const finIt2=getFinItemsActive(c);
   const finI2=finIt2.reduce((s,i)=>s+i.init,0),finB2=finIt2.reduce((s,i)=>s+i.bal,0);
-  const finPnlExGg=finB2-finI2-ggPnl;const totalCum=CUM_PROFIT+finPnlExGg;
+  const finPnlExGg=finB2-finI2-ggPnl;
+  // 앵커 기반 누적수익: 6/13 확정값 + (현재 꿈비제외 fin총액 - 앵커 fin총액)
+  const ggBalNow=(gg?gg.bal:0);const finTotalExGg=finB2-ggBalNow;
+  const totalCum=CUM_ANCHOR_VALUE+(finTotalExGg-CUM_ANCHOR_FINTOTAL);
   const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashArr.push(it)}));
   const cashBal=cashArr.length?cashArr[0].bal:0;
   const dailyP=getDailyProfit();
@@ -946,7 +950,9 @@ function rCumul(){
   const gg2=all.find(x=>x.name==='꿈비');const ggP2=gg2?(gg2.bal-gg2.init):0;
   const finIt3=getFinItemsActive(c);
   const fI3=finIt3.reduce((s,i)=>s+i.init,0),fB3=finIt3.reduce((s,i)=>s+i.bal,0);
-  const finPnl3=fB3-fI3-ggP2;const totalCum2=CUM_PROFIT+finPnl3;
+  const finPnl3=fB3-fI3-ggP2;
+  const ggBal3=(gg2?gg2.bal:0);const finTotalExGg3=fB3-ggBal3;
+  const totalCum2=CUM_ANCHOR_VALUE+(finTotalExGg3-CUM_ANCHOR_FINTOTAL);
   const cumPp=ti?pct(ti+totalCum2,ti):0;const recs=getDaily();
   let h=`<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>포트폴리오 손익 요약</div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px">
@@ -972,13 +978,8 @@ function rCumul(){
   if(fs.totals&&fs.totals.length>=2){
     const tot=fs.totals;const dvals=fs.daily;
     let cumP=0;const cumArr=dvals.map(function(v){cumP+=v;return cumP});
-    // 현재일(최신) 실제 누적수익으로 역산: 각 일자 실제누적 = 상대누적 + 오프셋
-    const _c=live();const _finIt=getFinItemsActive(_c);
-    const _finI=_finIt.reduce((s,i)=>s+i.init,0),_finB=_finIt.reduce((s,i)=>s+i.bal,0);
-    const _gg=_c.flatMap(x=>x.items).find(x=>x.name==='꿈비');const _ggPnl=_gg?(_gg.bal-_gg.init):0;
-    const _curCum=CUM_PROFIT+(_finB-_finI-_ggPnl);
-    const _offset=_curCum-(cumArr.length?cumArr[cumArr.length-1]:0);
-    const realCumArr=cumArr.map(function(v){return v+_offset});
+    // 앵커 기반 실제 누적수익: 각 일자 = CUM_ANCHOR_VALUE + (해당일 fin총액 - 앵커 fin총액)
+    const realCumArr=tot.map(function(t){return CUM_ANCHOR_VALUE+(t.total-CUM_ANCHOR_FINTOTAL)});
     h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 추이 (꿈비 제외)</div><div class="cw"><canvas id="finDC"></canvas></div></div>`;
     h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 변화표 (꿈비 제외)</div><div class="tbl-scroll"><table style="min-width:480px"><thead><tr><th>날짜</th><th style="text-align:right">금융자산 총액</th><th style="text-align:right">일별 수익</th><th style="text-align:right">누적 수익(기초대비)</th><th style="text-align:right">누적 투자수익</th></tr></thead><tbody>`;
     for(let i=tot.length-1;i>=0;i--){
