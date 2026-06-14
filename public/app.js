@@ -968,11 +968,24 @@ function rCumul(){
     }
     h+='</tbody></table></div></div>';
   }
+  // ilbyeol fin profit table+chart
+  if(fs.totals&&fs.totals.length>=2){
+    const tot=fs.totals;const dvals=fs.daily;
+    let cumP=0;const cumArr=dvals.map(function(v){cumP+=v;return cumP});
+    h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 추이 (꿈비 제외)</div><div class="cw"><canvas id="finDC"></canvas></div></div>`;
+    h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>일별 금융자산 수익 변화표 (꿈비 제외)</div><div class="tbl-scroll"><table style="min-width:480px"><thead><tr><th>날짜</th><th style="text-align:right">금융자산 총액</th><th style="text-align:right">일별 수익</th><th style="text-align:right">누적 수익</th></tr></thead><tbody>`;
+    for(let i=tot.length-1;i>=0;i--){
+      const cur=tot[i].total;const dp=dvals[i];const cp=cumArr[i];
+      h+=`<tr><td style="text-align:left" class="am">${tot[i].date}</td><td class="am">${ff(cur)}</td><td class="am ${dp>=0?'up':'dn'}">${dp>=0?'+':''}${ff(dp)}</td><td class="am ${cp>=0?'up':'dn'}">${cp>=0?'+':''}${ff(cp)}</td></tr>`;
+    }
+    h+='</tbody></table></div></div>';
+  }
   
   
   document.getElementById('paneActive').innerHTML=h;
   if(recs.length>=2)setTimeout(()=>{drawCum(recs)},60);
   if(fs.totals&&fs.totals.length>=2)setTimeout(()=>{drawFinTotal(fs.totals)},80);
+  if(fs.totals&&fs.totals.length>=2)setTimeout(function(){drawFinDaily(fs)},90);
 }
 function delDR(id){saveDaily(getDaily().filter(r=>r.id!==id));render()}
 function drawCum(recs){const cv=document.getElementById('cumC');if(!cv)return;const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);const W=rect.width,H=320;const _seen={};recs.forEach(r=>{_seen[r.date+'|'+r.product]=r});const deduped=Object.values(_seen);const bd={};deduped.forEach(r=>{if(!bd[r.date])bd[r.date]=0;bd[r.date]+=r.bal});const ds=Object.keys(bd).sort(),vs=ds.map(d=>bd[d]);if(vs.length<2)return;const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(77,142,255,.15)');gr.addColorStop(1,'rgba(77,142,255,0)');ctx.fillStyle=gr;ctx.fill();ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#4d8eff';ctx.lineWidth=2;ctx.stroke();vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#4d8eff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)})}
@@ -996,6 +1009,27 @@ function drawFinTotal(totals){
   ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';
   ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)});
 }
+function drawFinDaily(fs){
+  const cv=document.getElementById('finDC');if(!cv)return;
+  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();
+  cv.width=rect.width*dpr;cv.height=300*dpr;ctx.scale(dpr,dpr);
+  const W=rect.width,H=300;
+  const ds=fs.totals.map(t=>t.date),vs=fs.daily.slice();
+  if(vs.length<2)return;
+  const pad={t:30,b:50,l:80,r:20},cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const mx=Math.max(...vs,0),mn=Math.min(...vs,0),rg=(mx-mn)||1;
+  const xO=i=>pad.l+(i/(ds.length-1||1))*cW;
+  const yO=v=>pad.t+(1-(v-mn)/rg)*cH;
+  const y0=yO(0);
+  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=pad.t+cH*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx-rg*i/4),pad.l-8,y+3);}
+  ctx.strokeStyle='rgba(255,255,255,.12)';ctx.beginPath();ctx.moveTo(pad.l,y0);ctx.lineTo(W-pad.r,y0);ctx.stroke();
+  const bw=Math.max(2,cW/ds.length*0.6);
+  vs.forEach((v,i)=>{const x=xO(i),y=yO(v);ctx.fillStyle=v>=0?'#3fb950':'#f85149';const top=Math.min(y,y0),hh=Math.abs(y-y0);ctx.fillRect(x-bw/2,top,bw,hh||1);});
+  ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';
+  ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18);});
+}
+
 // =========== 전체 투자자산 (금융투자 합계만, 나머지 수정 가능, 상품추가 팝업) ===========
 function rTotal(){
   const c=live();const cats=getCats();let h='',gi=0;
