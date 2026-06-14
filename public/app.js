@@ -74,12 +74,19 @@ function live(){
   c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashItem=it}));
   if(!cashItem){cashItem={id:'i_cash',name:'현금',init:0,bal:0};cashCat.items.push(cashItem)}
   getCash().forEach(tx=>{
-    if(tx.isInvestment&&tx.linkedProduct){
+    const amt=tx.amount;
+    if(tx.fromName!==undefined||tx.toName!==undefined){
+      let from=null,to=null;
+      if(tx.fromName){c.forEach(cat=>cat.items.forEach(it=>{if(it.name===tx.fromName)from=it}))}
+      if(tx.toName){c.forEach(cat=>cat.items.forEach(it=>{if(it.name===tx.toName)to=it}))}
+      if(from)from.bal-=amt;
+      if(to)to.bal+=amt;
+    }else if(tx.isInvestment&&tx.linkedProduct){
       let lk=null;c.forEach(cat=>cat.items.forEach(it=>{if(it.name===tx.linkedProduct)lk=it}));
-      if(tx.type==='in'){cashItem.bal+=tx.amount;if(lk)lk.bal-=tx.amount}
-      else{cashItem.bal-=tx.amount;if(lk)lk.bal+=tx.amount}
+      if(tx.type==='in'){cashItem.bal+=amt;if(lk)lk.bal-=amt}
+      else{cashItem.bal-=amt;if(lk)lk.bal+=amt}
     }else{
-      if(tx.type==='in')cashItem.bal+=tx.amount;else cashItem.bal-=tx.amount;
+      if(tx.type==='in')cashItem.bal+=amt;else cashItem.bal-=amt;
     }
   });
   const hist=getBalHist();
@@ -851,7 +858,7 @@ function rCash(){
   const prods=[];getCats().forEach(cat=>cat.items.forEach(it=>{if(it.name!=='현금')prods.push({cat:cat.name,name:it.name})}));
   const pOpts=prods.map(p=>`<option value="${p.name}">${p.name} (${p.cat})</option>`).join('');
   let h=`<div class="nb">💰 <b>현금 입출금 기록</b> — 투자 관련 입출금 시 연동 상품의 잔액이 자동 조정됩니다.<br><b>예)</b> 지인대여 상환 입금 → 현금↑ + 대여금↓ &nbsp;|&nbsp; 추가 투자 출금 → 현금↓ + 투자상품↑</div>
-    <div class="fc"><div class="fg"><label>날짜</label><input type="date" id="cDate" value="${today()}"></div><div class="fg"><label>유형</label><select id="cType" style="min-width:80px"><option value="in">입금</option><option value="out">출금</option></select></div><div class="fg"><label>금액</label><input type="number" id="cAmt" placeholder="금액" style="min-width:140px"></div><div class="fg"><label>투자 연동</label><select id="cInv" onchange="document.getElementById('lkW').style.display=this.value==='yes'?'':'none'" style="min-width:110px"><option value="no">일반</option><option value="yes">투자 관련</option></select></div><div class="fg" id="lkW" style="display:none"><label>연동 상품</label><select id="cLk" style="min-width:160px">${pOpts}</select></div><div class="fg" style="flex:1;min-width:120px"><label>적요</label><input type="text" id="cMemo" placeholder="메모" style="width:100%"></div><button class="btn bp" onclick="addCash()">등록</button></div>
+    <div class="fc"><div class="fg"><label>날짜</label><input type="date" id="cDate" value="${today()}"></div><div class="fg"><label>출금처 (from)</label><select id="cFrom" style="min-width:170px"><option value="">외부</option><option value="계좌잔액">계좌잔액 (현금)</option>${pOpts}</select></div><div class="fg"><label>입금처 (to)</label><select id="cTo" style="min-width:170px"><option value="">외부</option><option value="계좌잔액">계좌잔액 (현금)</option>${pOpts}</select></div><div class="fg"><label>금액</label><input type="number" id="cAmt" placeholder="금액" style="min-width:140px"></div><div class="fg" style="flex:1;min-width:120px"><label>적요</label><input type="text" id="cMemo" placeholder="메모" style="width:100%"></div><button class="btn bp" onclick="addCash()">등록</button></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><div style="font-size:14px;font-weight:600;display:flex;align-items:center;gap:8px"><div class="cd" style="background:var(--cyan)"></div>현금 잔액: <span class="mono" style="color:var(--cyan)">${ff(cashBal)}원</span></div><button class="btn bo2" onclick="expCash()">CSV 내보내기</button></div>`;
   if(!recs.length){h+='<div class="tw"><div class="em">현금 입출금 기록이 없습니다.</div></div>'}
   else{
@@ -859,16 +866,78 @@ function rCash(){
     h+=`<div class="sr"><div class="sb"><div class="sl">총 입금</div><div class="sv mono up">+${ff(tIn)}</div></div><div class="sb"><div class="sl">총 출금</div><div class="sv mono dn">-${ff(tOut)}</div></div><div class="sb"><div class="sl">순 입출금</div><div class="sv mono ${tIn-tOut>=0?'up':'dn'}">${tIn-tOut>=0?'+':''}${ff(tIn-tOut)}</div></div><div class="sb"><div class="sl">투자연동</div><div class="sv mono" style="color:var(--purple)">${invC}건</div></div></div>`;
     const chrono=[...recs].sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));const bm={};let rb=0;chrono.forEach(r=>{rb+=(r.type==='in'?1:-1)*r.amount;bm[r.id]=rb});
     const sorted=[...recs].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-    h+=`<div class="tw"><div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>유형</th><th style="text-align:right">금액</th><th style="text-align:right">잔액</th><th>연동상품</th><th>적요</th><th></th></tr></thead><tbody>`;
-    sorted.forEach(r=>{const tag=r.type==='in'?'<span class="tg ti">입금</span>':'<span class="tg to">출금</span>';const lk=r.isInvestment&&r.linkedProduct?`${r.linkedProduct}<span class="lb">투자연동</span>`:'<span style="color:var(--t3)">-</span>';
-      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${tag}</td><td class="am ${r.type==='in'?'up':'dn'}">${r.type==='in'?'+':'-'}${ff(r.amount)}</td><td class="am">${ff(bm[r.id]||0)}</td><td style="text-align:left;font-size:12px">${lk}</td><td style="text-align:left;color:var(--t3);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delCash('${r.id}')">삭제</button></td></tr>`});
+    h+=`<div class="tw"><div class="tbl-scroll"><table><thead><tr><th>날짜</th><th>유형</th><th style="text-align:right">금액</th><th>출금처 → 입금처</th><th>적요</th><th></th></tr></thead><tbody>`;
+    sorted.forEach(r=>{
+      let fromName=r.fromName,toName=r.toName;
+      if(fromName===undefined&&toName===undefined){
+        if(r.isInvestment&&r.linkedProduct){
+          if(r.type==='in'){fromName=r.linkedProduct;toName='계좌잔액'}
+          else{fromName='계좌잔액';toName=r.linkedProduct}
+        }else{
+          if(r.type==='in'){fromName=null;toName='계좌잔액'}
+          else{fromName='계좌잔액';toName=null}
+        }
+      }
+      const fromDisp=fromName||'<span style="color:var(--t3)">외부</span>';
+      const toDisp=toName||'<span style="color:var(--t3)">외부</span>';
+      const flow=`${fromDisp} → ${toDisp}`;
+      let tag;
+      if(!fromName)tag='<span class="tg ti">외부→입금</span>';
+      else if(!toName)tag='<span class="tg to">출금→외부</span>';
+      else if(fromName==='계좌잔액'||fromName==='현금')tag='<span class="tg" style="background:#1e3a5f;color:#7ab8ff">현금→투자</span>';
+      else if(toName==='계좌잔액'||toName==='현금')tag='<span class="tg" style="background:#5f3a1e;color:#ffb87a">회수→현금</span>';
+      else tag='<span class="tg" style="background:#3a1e5f;color:#b87aff">계좌간 이체</span>';
+      h+=`<tr><td style="text-align:left" class="am">${r.date}</td><td style="text-align:left">${tag}</td><td class="am">${ff(r.amount)}</td><td style="text-align:left;font-size:12px">${flow}</td><td style="text-align:left;color:var(--t3);font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis">${r.memo||''}</td><td><button class="btn bd" style="padding:4px 10px;font-size:10px" onclick="delCash('${r.id}')">삭제</button></td></tr>`;
+    });
     h+='</tbody></table></div>';
   }
   document.getElementById('paneActive').innerHTML=h;
 }
-function addCash(){const date=document.getElementById('cDate').value,type=document.getElementById('cType').value,amount=parseInt(document.getElementById('cAmt').value);const isInvestment=document.getElementById('cInv').value==='yes',linkedProduct=isInvestment?document.getElementById('cLk').value:null,memo=document.getElementById('cMemo').value;if(!date||isNaN(amount)||amount<=0){alert('날짜와 금액을 입력하세요.');return}const r=getCash();r.push({id:uid(),date,type,amount,isInvestment,linkedProduct,memo});saveCash(r);render()}
+function addCash(){
+  const date=document.getElementById('cDate').value;
+  const fromName=document.getElementById('cFrom').value||null;
+  const toName=document.getElementById('cTo').value||null;
+  const amount=parseInt(document.getElementById('cAmt').value);
+  const memo=document.getElementById('cMemo').value;
+  if(!date||isNaN(amount)||amount<=0){alert('날짜와 금액을 입력하세요.');return}
+  if(!fromName&&!toName){alert('출금처 또는 입금처 중 하나는 선택해야 합니다.');return}
+  if(fromName===toName){alert('출금처와 입금처가 동일합니다.');return}
+  let type='out',isInvestment=false,linkedProduct=null;
+  const isCashFrom=(fromName==='계좌잔액'||fromName==='현금');
+  const isCashTo=(toName==='계좌잔액'||toName==='현금');
+  if(isCashFrom){type='out';isInvestment=!!toName;linkedProduct=toName||null}
+  else if(isCashTo){type='in';isInvestment=!!fromName;linkedProduct=fromName||null}
+  else if(!fromName){type='in';isInvestment=false}
+  else if(!toName){type='out';isInvestment=false}
+  else{type='out';isInvestment=true}
+  const r=getCash();
+  r.push({id:uid(),date,fromName,toName,amount,memo,type,isInvestment,linkedProduct});
+  saveCash(r);
+  render();
+}
 function delCash(id){if(!confirm('삭제하시겠습니까?'))return;saveCash(getCash().filter(r=>r.id!==id));render()}
-function expCash(){const r=getCash();if(!r.length){alert('데이터가 없습니다.');return}let csv='\uFEFF날짜,유형,금액,투자연동,연동상품,적요\n';[...r].sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>{csv+=`${x.date},${x.type==='in'?'입금':'출금'},${x.amount},${x.isInvestment?'Y':'N'},${x.linkedProduct||''},${x.memo||''}\n`});const b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='현금입출금_'+today()+'.csv';a.click()}
+function expCash(){
+  const r=getCash();
+  if(!r.length){alert('데이터가 없습니다.');return}
+  let csv='\uFEFF날짜,출금처,입금처,금액,적요\n';
+  [...r].sort((a,b)=>a.date.localeCompare(b.date)).forEach(x=>{
+    let f=x.fromName,t=x.toName;
+    if(f===undefined&&t===undefined){
+      if(x.isInvestment&&x.linkedProduct){
+        if(x.type==='in'){f=x.linkedProduct;t='계좌잔액'}
+        else{f='계좌잔액';t=x.linkedProduct}
+      }else{
+        if(x.type==='in'){f='';t='계좌잔액'}
+        else{f='계좌잔액';t=''}
+      }
+    }
+    csv+=`${x.date},${f||'외부'},${t||'외부'},${x.amount},${x.memo||''}\n`;
+  });
+  const b=new Blob([csv],{type:'text/csv'}),a=document.createElement('a');
+  a.href=URL.createObjectURL(b);
+  a.download='현금입출금_'+today()+'.csv';
+  a.click();
+}
 
 // =========== 누적 수익 현황 ===========
 function rCumul(){
