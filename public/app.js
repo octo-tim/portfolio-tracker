@@ -149,7 +149,7 @@ function getDailyPnLSeries(){
     if(!monthly[m])monthly[m]=0;
     monthly[m]+=d.pnl;
   });
-  return{dates:daily.map(d=>d.date),daily:daily.map(d=>d.pnl),monthly};
+  return{dates:daily.map(d=>d.date),daily:daily.map(d=>d.pnl),monthly,totals};
 }
 
 // =========== HEADER ===========
@@ -955,14 +955,47 @@ function rCumul(){
       <div style="padding:14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)"><div style="font-size:10px;color:var(--t3);font-weight:600;margin-bottom:6px">총 기록</div><div class="mono" style="font-size:20px;color:var(--blue)">${recs.length}건</div></div></div></div>`;
   if(recs.length>=2){h+=`<div class="cc full"><div class="ct"><div class="cd" style="background:var(--blue)"></div>일별 총 평가금액 추이</div><div class="cw"><canvas id="cumC"></canvas></div></div>`;
     h+='<div class="tw"><div class="em">금융투자자산 탭에서 일별 잔액을 2건 이상 기록하면 차트가 표시됩니다.</div></div>'}
+  // === 전체 금융자산 투자금액 변화표 + 그래프 ===
+  const fs=getDailyPnLSeries();
+  if(fs.totals&&fs.totals.length>=2){
+    const tot=fs.totals;const baseTot=tot[0].total;
+    h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--purple)"></div>전체 금융자산 투자금액 추이 (꿈비 제외)</div><div class="cw"><canvas id="finC"></canvas></div></div>`;
+    h+=`<div class="cc full" style="margin-top:20px"><div class="ct"><div class="cd" style="background:var(--purple)"></div>전체 금융자산 투자금액 변화표</div><div class="tbl-scroll"><table style="min-width:560px"><thead><tr><th>날짜</th><th style="text-align:right">금융자산 총액</th><th style="text-align:right">전일 대비</th><th style="text-align:right">기준일 대비</th><th style="text-align:right">변동률</th></tr></thead><tbody>`;
+    for(let i=tot.length-1;i>=0;i--){
+      const cur=tot[i].total;const prev=i>0?tot[i-1].total:cur;
+      const dDiff=cur-prev;const bDiff=cur-baseTot;const dPct=prev?((cur-prev)/prev*100):0;
+      h+=`<tr><td style="text-align:left" class="am">${tot[i].date}</td><td class="am">${ff(cur)}</td><td class="am ${dDiff>=0?'up':'dn'}">${dDiff>=0?'+':''}${ff(dDiff)}</td><td class="am ${bDiff>=0?'up':'dn'}">${bDiff>=0?'+':''}${ff(bDiff)}</td><td class="am ${dPct>=0?'up':'dn'}">${dPct>=0?'+':''}${dPct.toFixed(2)}%</td></tr>`;
+    }
+    h+='</tbody></table></div></div>';
+  }
   
   
   document.getElementById('paneActive').innerHTML=h;
   if(recs.length>=2)setTimeout(()=>{drawCum(recs)},60);
+  if(fs.totals&&fs.totals.length>=2)setTimeout(()=>{drawFinTotal(fs.totals)},80);
 }
 function delDR(id){saveDaily(getDaily().filter(r=>r.id!==id));render()}
 function drawCum(recs){const cv=document.getElementById('cumC');if(!cv)return;const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);const W=rect.width,H=320;const _seen={};recs.forEach(r=>{_seen[r.date+'|'+r.product]=r});const deduped=Object.values(_seen);const bd={};deduped.forEach(r=>{if(!bd[r.date])bd[r.date]=0;bd[r.date]+=r.bal});const ds=Object.keys(bd).sort(),vs=ds.map(d=>bd[d]);if(vs.length<2)return;const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(77,142,255,.15)');gr.addColorStop(1,'rgba(77,142,255,0)');ctx.fillStyle=gr;ctx.fill();ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#4d8eff';ctx.lineWidth=2;ctx.stroke();vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#4d8eff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)})}
 
+function drawFinTotal(totals){
+  const cv=document.getElementById('finC');if(!cv)return;
+  const ctx=cv.getContext('2d'),dpr=window.devicePixelRatio||1,rect=cv.parentElement.getBoundingClientRect();
+  cv.width=rect.width*dpr;cv.height=320*dpr;ctx.scale(dpr,dpr);
+  const W=rect.width,H=320;
+  const ds=totals.map(t=>t.date),vs=totals.map(t=>t.total);
+  if(vs.length<2)return;
+  const pad={t:30,b:50,l:80,r:20},cW2=W-pad.l-pad.r,cH2=H-pad.t-pad.b;
+  const mn=Math.min(...vs)*.98,mx2=Math.max(...vs)*1.02,rg=mx2-mn||1;
+  const xO=i=>pad.l+(i/(ds.length-1||1))*cW2,yO=v=>pad.t+(1-(v-mn)/rg)*cH2;
+  ctx.strokeStyle='rgba(255,255,255,.04)';ctx.lineWidth=1;
+  for(let i=0;i<=4;i++){const y=pad.t+cH2*i/4;ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='right';ctx.fillText(fmt(mx2-rg*i/4),pad.l-8,y+3)}
+  ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.lineTo(xO(vs.length-1),pad.t+cH2);ctx.lineTo(xO(0),pad.t+cH2);ctx.closePath();
+  const gr=ctx.createLinearGradient(0,pad.t,0,pad.t+cH2);gr.addColorStop(0,'rgba(167,119,255,.18)');gr.addColorStop(1,'rgba(167,119,255,0)');ctx.fillStyle=gr;ctx.fill();
+  ctx.beginPath();ctx.moveTo(xO(0),yO(vs[0]));vs.forEach((v,i)=>ctx.lineTo(xO(i),yO(v)));ctx.strokeStyle='#a777ff';ctx.lineWidth=2;ctx.stroke();
+  vs.forEach((v,i)=>{ctx.beginPath();ctx.arc(xO(i),yO(v),3,0,Math.PI*2);ctx.fillStyle='#a777ff';ctx.fill();ctx.strokeStyle='#0a0e17';ctx.lineWidth=1.5;ctx.stroke()});
+  ctx.fillStyle='#516480';ctx.font='10px DM Mono';ctx.textAlign='center';
+  ds.forEach((d,i)=>{if(ds.length<=15||i%(Math.ceil(ds.length/12))===0)ctx.fillText(d.slice(5),xO(i),H-pad.b+18)});
+}
 // =========== 전체 투자자산 (금융투자 합계만, 나머지 수정 가능, 상품추가 팝업) ===========
 function rTotal(){
   const c=live();const cats=getCats();let h='',gi=0;
