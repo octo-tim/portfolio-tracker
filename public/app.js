@@ -157,7 +157,7 @@ function getDailyPnLSeries(){
 document.getElementById('hdrDate').textContent=`${today()} 기준 · 개인 투자 현황`;
 
 // =========== TABS ===========
-const TABS=[{id:'fin',label:'금융투자자산'},{id:'futures',label:'선물거래'},{id:'cash',label:'현금 입출금'},{id:'cumul',label:'누적 수익 현황'},{id:'total',label:'전체 투자자산'}];
+const TABS=[{id:'fin',label:'금융투자자산'},{id:'futures',label:'선물거래'},{id:'cash',label:'현금 입출금'},{id:'cumul',label:'누적 수익 현황'},{id:'dailyinput',label:'일별 입력현황'},{id:'total',label:'전체 투자자산'}];
 let curTab='fin';
 function renderTabs(){document.getElementById('tabBar').innerHTML=TABS.map(t=>`<div class="tab ${t.id===curTab?'on':''}" onclick="go('${t.id}')">${t.label}</div>`).join('')}
 function go(id){curTab=id;renderTabs();render()}
@@ -188,7 +188,7 @@ function renderSum(){
 }
 
 // =========== RENDER ===========
-function render(){renderSum();document.getElementById('mainContent').innerHTML='<div class="pane on" id="paneActive"></div>';({total:rTotal,fin:rFin,futures:rFutures,cash:rCash,cumul:rCumul})[curTab]()}
+function render(){renderSum();document.getElementById('mainContent').innerHTML='<div class="pane on" id="paneActive"></div>';({total:rTotal,fin:rFin,futures:rFutures,cash:rCash,cumul:rCumul,dailyinput:rDailyInput})[curTab]()}
 
 // =========== 금융투자자산 ===========
 function rFin(){
@@ -492,6 +492,116 @@ function saveBatch(){
   saveBalHist(h2);saveDaily(d);alert(`${date} 기준 ${count}개 상품 잔액이 저장되었습니다.`);render();
 }
 function delBalHist(id){if(!confirm('이 기록을 삭제하시겠습니까?'))return;saveBalHist(getBalHist().filter(r=>r.id!==id));render()}
+
+// ===== 일별 입력현황 (매트릭스 + 날짜별 편집) =====
+function getFinAllItems(){
+  const c=getCats();const out=[];
+  c.forEach(cat=>{cat.items.forEach(it=>{if(it.name!=='\ud604\uae08'&&it.name!=='\uacc4\uc88c\uc794\uc561')out.push({id:it.id,name:it.name,cat:cat.name})})});
+  return out;
+}
+function rDailyInput(){
+  const hist=getBalHist();
+  const items=getFinAllItems();
+  const dates=[...new Set(hist.map(h=>h.date))].sort().reverse();
+  let h='';
+  h+='<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--blue)"></div>\ub0a0\uc9dc\ubcc4 \uc794\uc561 \ud3b8\uc9d1</div>';
+  h+='<div class="fc" style="margin-bottom:14px"><div class="fg"><label>\ub0a0\uc9dc \uc120\ud0dd</label><select id="diDate" onchange="diLoadDate()" style="min-width:160px"><option value="">\u2014 \ub0a0\uc9dc \uc120\ud0dd \u2014</option>';
+  dates.forEach(d=>{h+=`<option value="${d}">${d}</option>`});
+  h+='</select></div><div class="fg"><label>\uc0c8 \ub0a0\uc9dc \ucd94\uac00</label><input type="date" id="diNewDate" style="min-width:150px"></div><button class="btn bp" onclick="diAddDate()">\ub0a0\uc9dc \ucd94\uac00</button></div>';
+  h+='<div id="diEditPane"></div></div>';
+  h+='<div class="cc full"><div class="ct"><div class="cd" style="background:var(--purple)"></div>\uc804\uccb4 \uc785\ub825 \ub9e4\ud2b8\ub9ad\uc2a4 (\uc140 \ud074\ub9ad\ud558\uc5ec \uc218\uc815)</div>';
+  if(dates.length===0){h+='<div class="em">\uc785\ub825\ub41c \uc77c\ubcc4 \uc794\uc561\uc774 \uc5c6\uc2b5\ub2c8\ub2e4.</div></div>';document.getElementById('paneActive').innerHTML=h;return;}
+  h+='<div class="tbl-scroll"><table style="min-width:'+(160+items.length*110)+'px"><thead><tr><th style="position:sticky;left:0;background:var(--bg2);z-index:2">\ub0a0\uc9dc</th>';
+  items.forEach(it=>{h+=`<th style="text-align:right;font-size:10px">${it.name}</th>`});
+  h+='<th style="text-align:right">\ud569\uacc4(\uaf48\ube44\uc81c\uc678)</th><th></th></tr></thead><tbody>';
+  const NF=new Set(['\ubd80\ub3d9\uc0b0\ud22c\uc790','\uc0ac\uc5c5\ud22c\uc790','\uc9c0\uc778\ub300\uc5ec']);
+  const cats=getCats();
+  dates.forEach(d=>{
+    h+=`<tr><td style="text-align:left;position:sticky;left:0;background:var(--bg);z-index:1;font-weight:600" class="am">${d}</td>`;
+    let rowSum=0;
+    items.forEach(it=>{
+      const rec=hist.find(x=>x.date===d&&x.itemId===it.id);
+      const val=rec?rec.bal:null;
+      const itCat=cats.find(cc=>cc.items.some(x=>x.id===it.id));
+      const isFin=itCat&&!NF.has(itCat.name)&&it.name!=='\uaf48\ube44';
+      if(rec&&isFin)rowSum+=val;
+      const disp=val===null?'<span style="color:var(--t3)">-</span>':ff(val);
+      h+=`<td class="am" style="cursor:pointer;font-size:11px" onclick="diEditCell('${d}','${it.id}')" title="\ud074\ub9ad\ud558\uc5ec \uc218\uc815">${disp}</td>`;
+    });
+    h+=`<td class="am" style="font-weight:600">${ff(rowSum)}</td><td><button class="btn bd" style="padding:3px 8px;font-size:10px" onclick="diDelDate('${d}')">\uc0ad\uc81c</button></td></tr>`;
+  });
+  h+='</tbody></table></div></div>';
+  document.getElementById('paneActive').innerHTML=h;
+}
+function diLoadDate(){
+  const d=document.getElementById('diDate').value;
+  const pane=document.getElementById('diEditPane');
+  if(!d){pane.innerHTML='';return;}
+  const hist=getBalHist();const items=getFinAllItems();
+  let h='<table style="min-width:420px"><thead><tr><th style="text-align:left">\uc0c1\ud488</th><th style="text-align:right">\uc794\uc561</th></tr></thead><tbody>';
+  items.forEach(it=>{
+    const rec=hist.find(x=>x.date===d&&x.itemId===it.id);
+    const val=rec?rec.bal:'';
+    h+=`<tr><td style="text-align:left">${it.name}</td><td style="text-align:right"><input type="number" id="di_${it.id}" value="${val}" placeholder="\ubbf8\uc785\ub825" style="width:150px;text-align:right"></td></tr>`;
+  });
+  h+='</tbody></table>';
+  h+=`<div style="margin-top:12px;display:flex;gap:8px"><button class="btn bp" onclick="diSaveDate('${d}')">${d} \uc800\uc7a5</button><button class="btn bd" onclick="diDelDate('${d}')">${d} \uc804\uccb4 \uc0ad\uc81c</button></div>`;
+  pane.innerHTML=h;
+}
+function diSaveDate(d){
+  const items=getFinAllItems();
+  let hist=getBalHist();
+  let cnt=0;
+  items.forEach(it=>{
+    const el=document.getElementById('di_'+it.id);
+    if(!el)return;
+    const raw=el.value.trim();
+    const idx=hist.findIndex(x=>x.date===d&&x.itemId===it.id);
+    if(raw===''){ if(idx>=0)hist.splice(idx,1); return; }
+    const v=parseInt(raw);
+    if(isNaN(v))return;
+    if(idx>=0){hist[idx].bal=v;}
+    else{hist.push({id:uid(),date:d,itemId:it.id,bal:v});}
+    cnt++;
+  });
+  saveBalHist(hist);
+  alert(`${d} ${cnt}\uac1c \uc0c1\ud488 \uc794\uc561\uc774 \uc800\uc7a5\ub418\uc5c8\uc2b5\ub2c8\ub2e4.`);
+  render();
+}
+function diAddDate(){
+  const d=document.getElementById('diNewDate').value;
+  if(!d){alert('\ub0a0\uc9dc\ub97c \uc120\ud0dd\ud558\uc138\uc694.');return;}
+  if(!document.querySelector(`#diDate option[value="${d}"]`)){
+    const opt=document.createElement('option');opt.value=d;opt.textContent=d;
+    document.getElementById('diDate').appendChild(opt);
+  }
+  document.getElementById('diDate').value=d;
+  diLoadDate();
+}
+function diDelDate(d){
+  if(!confirm(d+' \uc758 \ubaa8\ub4e0 \uc785\ub825\uc744 \uc0ad\uc81c\ud558\uc2dc\uaca0\uc2b5\ub2c8\uae4c?'))return;
+  saveBalHist(getBalHist().filter(r=>r.date!==d));
+  saveDaily(getDaily().filter(r=>r.date!==d));
+  render();
+}
+function diEditCell(d,itemId){
+  const hist=getBalHist();
+  const rec=hist.find(x=>x.date===d&&x.itemId===itemId);
+  const cur=rec?rec.bal:'';
+  const nv=prompt(d+' \uc794\uc561 \uc218\uc815 (\ube48\uce78=\uc0ad\uc81c):',cur);
+  if(nv===null)return;
+  let h=getBalHist();
+  const idx=h.findIndex(x=>x.date===d&&x.itemId===itemId);
+  if(nv.trim()===''){ if(idx>=0)h.splice(idx,1); }
+  else{
+    const v=parseInt(nv);
+    if(isNaN(v)){alert('\uc22b\uc790\ub97c \uc785\ub825\ud558\uc138\uc694.');return;}
+    if(idx>=0)h[idx].bal=v; else h.push({id:uid(),date:d,itemId:itemId,bal:v});
+  }
+  saveBalHist(h);
+  render();
+}
+
 
 // ===== CHART: Item Return % (vs base date) =====
 function drawItemReturnChart(){
