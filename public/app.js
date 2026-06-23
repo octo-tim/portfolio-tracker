@@ -106,6 +106,8 @@ function getDailyProfit(){
   const hist=getBalHist();if(!hist.length)return 0;
   const cats=getCats();
   const finItems=getFinItems(cats).filter(x=>x.name!=='꿈비');
+  // 계좌잔액(현금)도 포함: 랩↔현금 이체를 손익무관 처리
+  cats.forEach(cat=>cat.items.forEach(it=>{if(it.name==='계좌잔액'||it.name==='현금'){if(!finItems.some(f=>f.id===it.id))finItems.push(it);}}));
   const dates=[...new Set(hist.map(h=>h.date))].sort();
   if(dates.length<2){
     const d0=dates[0];const recs=hist.filter(h=>h.date===d0);
@@ -128,6 +130,8 @@ function getDailyPnLSeries(){
   const hist=getBalHist();if(!hist.length)return{dates:[],daily:[],monthly:{}};
   const cats=getCats();
   const finItems=getFinItems(cats).filter(x=>x.name!=='꿈비');
+  // 계좌잔액(현금)도 포함: 랩↔현금 이체를 손익무관 처리
+  cats.forEach(cat=>cat.items.forEach(it=>{if(it.name==='계좌잔액'||it.name==='현금'){if(!finItems.some(f=>f.id===it.id))finItems.push(it);}}));
   const dates=[...new Set(hist.map(h=>h.date))].sort();
   // Build total per date
   const totals=[];
@@ -172,10 +176,11 @@ function renderSum(){
   const finIt2=getFinItemsActive(c);
   const finI2=finIt2.reduce((s,i)=>s+i.init,0),finB2=finIt2.reduce((s,i)=>s+i.bal,0);
   const finPnlExGg=finB2-finI2-ggPnl;
-  // 앵커 기반 누적수익: 6/13 확정값 + (현재 꿈비제외 fin총액 - 앵커 fin총액)
-  const ggBalNow=(gg?gg.bal:0);const finTotalExGg=finB2-ggBalNow;
-  const totalCum=CUM_ANCHOR_VALUE+(finTotalExGg-CUM_ANCHOR_FINTOTAL);
   const cashArr=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashArr.push(it)}));
+  const cashBal0=cashArr.reduce((s,i)=>s+i.bal,0);
+  // 앵커 기반 누적수익: 6/13 확정값 + (현재 꿈비제외 fin총액[현금포함] - 앵커 fin총액)
+  const ggBalNow=(gg?gg.bal:0);const finTotalExGg=finB2-ggBalNow+cashBal0;
+  const totalCum=CUM_ANCHOR_VALUE+(finTotalExGg-CUM_ANCHOR_FINTOTAL);
   const cashBal=cashArr.length?cashArr[0].bal:0;
   const dailyP=getDailyProfit();
   const cumPp=ti?pct(ti+totalCum,ti):0;
@@ -1061,7 +1066,9 @@ function rCumul(){
   const finIt3=getFinItemsActive(c);
   const fI3=finIt3.reduce((s,i)=>s+i.init,0),fB3=finIt3.reduce((s,i)=>s+i.bal,0);
   const finPnl3=fB3-fI3-ggP2;
-  const ggBal3=(gg2?gg2.bal:0);const finTotalExGg3=fB3-ggBal3;
+  const cashArr3=[];c.forEach(cat=>cat.items.forEach(it=>{if(it.name==='현금'||it.name==='계좌잔액')cashArr3.push(it)}));
+  const cashBal3=cashArr3.reduce((s,i)=>s+i.bal,0);
+  const ggBal3=(gg2?gg2.bal:0);const finTotalExGg3=fB3-ggBal3+cashBal3;
   const totalCum2=CUM_ANCHOR_VALUE+(finTotalExGg3-CUM_ANCHOR_FINTOTAL);
   const cumPp=ti?pct(ti+totalCum2,ti):0;const recs=getDaily();
   let h=`<div class="cc full" style="margin-bottom:20px"><div class="ct"><div class="cd" style="background:var(--green)"></div>포트폴리오 손익 요약</div>
